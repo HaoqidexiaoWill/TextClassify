@@ -65,6 +65,18 @@ class DATACQA:
                 label=row[3]
             ))
         return examples
+    def read_examples_test(self,input_file):
+        df = pd.read_csv(input_file, sep=',',names = ['id', 'question', 'answer', 'label'])
+        print('行数',df.shape[0])
+        examples = []
+        for index, row in df.iterrows():
+            examples.append(InputExample(
+                guid=row[0],
+                text_a=row[1],
+                text_b=row[2],
+                label=row[3]
+            ))
+        return examples
     def convert_examples_to_features(self,examples, tokenizer, max_seq_length):
         features = []
         '''

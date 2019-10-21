@@ -59,9 +59,9 @@ def compute_5R20(scores,labels,questions):
     result['rank']= result['scores'].groupby(result['questions']).rank(ascending = False)
 
 
-    eval_1R5 = result[(result['labels']==1) & (result['rank']<=5)]['labels'].sum()/(result[result['labels'] == 1].shape[0])
+    eval_5R20 = result[(result['labels']==1) & (result['rank']<=5)]['labels'].sum()/(result[result['labels'] == 1].shape[0])
 
-    return eval_1R5
+    return eval_5R20
 
 
 

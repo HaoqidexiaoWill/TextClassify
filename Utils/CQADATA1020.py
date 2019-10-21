@@ -57,7 +57,7 @@ def read_data(input_file,data_process_output):
 
 def process_data(df):
 
-    new_df = df[(df['question'].str.len() >= 128) & (df['question'].str.len() <= 256)& (df['answer'].str.len()>= 128) & (df['answer'].str.len() <= 256)]
+    new_df = df[(df['question'].str.len() >= 16) & (df['question'].str.len() <= 512)& (df['answer'].str.len()>= 32) & (df['answer'].str.len() <= 512)]
     print('行列数', new_df.shape)
     torned_df = df[~df.index.isin(new_df.index)]
     torned_answer = torned_df['answer'].tolist()
@@ -73,7 +73,7 @@ def process_data(df):
         # 负样例
 
         # 负样本答案
-        neg_answer = random.sample(torned_answer, 99)
+        neg_answer = random.sample(torned_answer, 19)
         for each in neg_answer:
 
             answer.append(each)

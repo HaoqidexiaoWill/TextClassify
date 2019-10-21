@@ -23,7 +23,7 @@ from pytorch_transformers.tokenization_bert import BertTokenizer
 from itertools import cycle
 
 from Config.argsBDCI import args
-from Utils.Logger import logger
+from Utils.Logger import get_train_logger
 from DATAProcess.LoadDataCQA import DATACQA
 from metric import accuracyCQA,compute_MRR_CQA,compute_5R20
 os.environ["CUDA_VISIBLE_DEVICES"]='0'
@@ -83,7 +83,8 @@ class Trainer:
         train_sampler = RandomSampler(train_data)
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=self.train_batch_size)
 
-        eval_examples = data.read_examples(examples_[1])
+        # eval_examples = data.read_examples(examples_[1])
+        eval_examples = data.read_examples_test(os.path.join(self.data_dir, 'test.csv'))
         eval_features = data.convert_examples_to_features(eval_examples, self.tokenizer, self.max_seq_length)
         all_input_ids = torch.tensor(data.select_field(eval_features, 'input_ids'), dtype=torch.long)
         all_input_mask = torch.tensor(data.select_field(eval_features, 'input_mask'), dtype=torch.long)
@@ -98,9 +99,10 @@ class Trainer:
     def train(self):
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
+        logger = get_train_logger(os.path.join(self.output_dir,'log.txt'))
 
         data_splitList = DATACQA.load_data(os.path.join(self.data_dir, 'train.csv'),n_splits=5)
-        for split_index ,each_data in enumerate(data_splitList):
+        for split_index,each_data in enumerate(data_splitList):
             # Prepare model
             config = BertConfig.from_pretrained(self.model_name_or_path, num_labels=self.num_labels)
             model = BertForSequenceClassification.from_pretrained(self.model_name_or_path, self.args, config=config)
@@ -250,7 +252,7 @@ class Trainer:
             debug=False,
             data_dir=self.data_dir
         )
-        test_examples = data.read_examples(os.path.join(self.data_dir, 'test.csv'))
+        test_examples = data.read_examples_test(os.path.join(self.data_dir, 'test.csv'))
         print('eval_examples的数量', len(test_examples))
         prediction = np.zeros((len(test_examples),3))
         gold_labels_  = np.zeros((len(test_examples),3))
