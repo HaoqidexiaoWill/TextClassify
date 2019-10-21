@@ -12,7 +12,7 @@ from pytorch_transformers.tokenization_bert import BertTokenizer
 from itertools import cycle
 
 from metric import accuracy
-from args import args
+from oldcode.args import args
 from oldcode.LoadDataBDCI import *
 
 class Trainer:

@@ -5,6 +5,7 @@ import logging
 import os
 import random
 import sys
+import time
 from io import open
 import pandas as pd
 import numpy as np
@@ -83,7 +84,18 @@ class Trainer:
         train_sampler = RandomSampler(train_data)
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=self.train_batch_size)
 
-        # eval_examples = data.read_examples(examples_[1])
+        '''
+        eval_examples = data.read_examples(examples_[1])
+        eval_features = data.convert_examples_to_features(eval_examples, self.tokenizer, self.max_seq_length)
+        all_input_ids = torch.tensor(data.select_field(eval_features, 'input_ids'), dtype=torch.long)
+        all_input_mask = torch.tensor(data.select_field(eval_features, 'input_mask'), dtype=torch.long)
+        all_segment_ids = torch.tensor(data.select_field(eval_features, 'segment_ids'), dtype=torch.long)
+        all_label = torch.tensor([f.label for f in eval_features], dtype=torch.long)
+        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label)
+        eval_sampler = SequentialSampler(eval_data)
+        eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=self.eval_batch_size)
+        '''
+
         eval_examples = data.read_examples_test(os.path.join(self.data_dir, 'test.csv'))
         eval_features = data.convert_examples_to_features(eval_examples, self.tokenizer, self.max_seq_length)
         all_input_ids = torch.tensor(data.select_field(eval_features, 'input_ids'), dtype=torch.long)
@@ -246,7 +258,67 @@ class Trainer:
 
             del model
             gc.collect()
-    def test(self):
+    def test_eval(self):
+        data = DATACQA(
+            debug=False,
+            data_dir=self.data_dir
+        )
+        test_examples = data.read_examples_test(os.path.join(self.data_dir, 'test.csv'))
+        print('eval_examples的数量', len(test_examples))
+
+        questions = [x.text_a for x in test_examples]
+        test_features = data.convert_examples_to_features(test_examples, self.tokenizer, self.max_seq_length)
+        all_input_ids = torch.tensor(data.select_field(test_features, 'input_ids'), dtype=torch.long)
+        all_input_mask = torch.tensor(data.select_field(test_features, 'input_mask'), dtype=torch.long)
+        all_segment_ids = torch.tensor(data.select_field(test_features, 'segment_ids'), dtype=torch.long)
+        all_label = torch.tensor([f.label for f in test_features], dtype=torch.long)
+
+        test_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label)
+        # Run prediction for full data
+        test_sampler = SequentialSampler(test_data)
+        test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=self.eval_batch_size)
+
+
+
+        config = BertConfig.from_pretrained(self.model_name_or_path, num_labels=self.num_labels)
+        model = BertForSequenceClassification.from_pretrained(
+            os.path.join(self.output_dir, "pytorch_model_0.bin"), self.args, config=config)
+        model.to(self.device)
+        model.eval()
+
+        inference_labels = []
+        gold_labels = []
+        scores = []
+
+        for input_ids, input_mask, segment_ids, label_ids in test_dataloader:
+            input_ids = input_ids.to(self.device)
+            input_mask = input_mask.to(self.device)
+            segment_ids = segment_ids.to(self.device)
+            label_ids = label_ids.to(self.device)
+
+            with torch.no_grad():
+                logits = model(
+                    input_ids=input_ids,
+                    token_type_ids=segment_ids,
+                    attention_mask=input_mask
+                ).detach().cpu().numpy()
+            label_ids = label_ids.to('cpu').numpy()
+            scores.append(logits)
+            inference_labels.append(np.argmax(logits, axis=1))
+            gold_labels.append(label_ids)
+        gold_labels = np.concatenate(gold_labels, 0)
+        scores = np.concatenate(scores, 0)
+        logits = np.concatenate(inference_labels, 0)
+
+
+        # eval_accuracy = accuracyCQA(inference_logits, gold_labels)
+        eval_mrr = compute_MRR_CQA(scores, gold_labels, questions)
+        eval_5R20 = compute_5R20(scores, gold_labels, questions)
+        print('eval_mrr',eval_mrr)
+        print('eval_5R20',eval_5R20)
+
+
+    def test_submission(self):
         data = DATACQA(
             debug=False,
             data_dir=self.data_dir
@@ -315,6 +387,7 @@ class Trainer:
 
 
 if __name__ == "__main__":
+
     trainer = Trainer(
         data_dir = '/home/lsy2018/TextClassification/DATA/DATA_CQA/data_1020/',
         output_dir = './model_BertLSTM_CQA',
@@ -322,4 +395,6 @@ if __name__ == "__main__":
         num_labels= 2,
         args = args)
     # trainer.train()
-    trainer.test()
+    time_start = time.time()
+    trainer.test_eval()
+    print('1000条测试运行时间',time.time()-time_start,'s')

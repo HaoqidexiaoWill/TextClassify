@@ -22,10 +22,12 @@ from pytorch_transformers.tokenization_bert import BertTokenizer
 
 from itertools import cycle
 
-from Config.argsCQA import args
+from Config.argsDSTC import args
 from Utils.Logger import logger
 from DATAProcess.LoadDataCQA import DATACQA
 from metric import accuracyCQA,compute_MRR_CQA,compute_5R20
+OUT_DIR = './model_BertLSTM_DSTC'
+
 os.environ["CUDA_VISIBLE_DEVICES"]='1'
 
 class Trainer:
@@ -99,6 +101,7 @@ class Trainer:
     def train(self):
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
+
 
         data_splitList = DATACQA.load_data(os.path.join(self.data_dir, 'train.csv'),n_splits=5)
         for split_index,each_data in enumerate(data_splitList):
@@ -215,12 +218,12 @@ class Trainer:
                         eval_loss = eval_loss / nb_eval_steps
                         eval_accuracy = accuracyCQA(inference_logits, gold_labels)
                         eval_mrr = compute_MRR_CQA(scores,gold_labels,questions)
-                        eval_5R20 = compute_5R20(scores,gold_labels,questions)
+                        # eval_5R20 = compute_5R20(scores,gold_labels,questions)
 
                         result = {'eval_loss': eval_loss,
                                   'eval_F1': eval_accuracy,
                                   'eval_MRR':eval_mrr,
-                                  'eval_5R20':eval_5R20,
+                                  # 'eval_5R20':eval_5R20,
                                   'global_step': global_step,
                                   'loss': train_loss}
 
@@ -253,9 +256,9 @@ class Trainer:
         )
         test_examples = data.read_examples_test(os.path.join(self.data_dir, 'test.csv'))
         print('eval_examples的数量', len(test_examples))
-        prediction = np.zeros((len(test_examples),self.num_labels))
-        gold_labels_  = np.zeros((len(test_examples),self.num_labels))
-        logits_ = np.zeros((len(test_examples),self.num_labels))
+        prediction = np.zeros((len(test_examples),3))
+        gold_labels_  = np.zeros((len(test_examples),3))
+        logits_ = np.zeros((len(test_examples),3))
         questions = [x.text_a for x in test_examples]
         test_features = data.convert_examples_to_features(test_examples, self.tokenizer, self.max_seq_length)
         all_input_ids = torch.tensor(data.select_field(test_features, 'input_ids'), dtype=torch.long)
@@ -316,10 +319,9 @@ class Trainer:
 
 if __name__ == "__main__":
     trainer = Trainer(
-        data_dir = '/home/lsy2018/TextClassification/DATA/DATA_CQA/data_1020/',
-        output_dir = './model_BertLSTM_CQA',
-        # CQA 是二分类
+        data_dir = '/home/lsy2018/TextClassification/DATA/DATA_DSTC/data_1021/',
+        output_dir = './model_BertLSTM_DSTC',
         num_labels= 2,
         args = args)
-    # trainer.train()
+    trainer.train()
     trainer.test()

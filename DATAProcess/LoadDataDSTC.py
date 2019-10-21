@@ -33,14 +33,14 @@ class InputFeatures(object):
             for _, input_ids, input_mask, segment_ids in choices_features
         ]
         self.label = label
-class DATACQA:
+class DATADSTC:
     def __init__(self, debug, data_dir):
         self.debug = debug
         self.data_dir = data_dir
 
     @staticmethod
     def load_data(input_file, n_splits=5):
-        df = pd.read_csv(input_file, sep=',', names=['id', 'question', 'answer', 'label'])
+        df = pd.read_csv(input_file, sep=',', names=['dialogid', 'userutt', 'resp', 'label'])
         print('行列数', df.shape)
         train_features = df.drop(['label'], axis=1)
         train_label = df['label']
@@ -66,7 +66,7 @@ class DATACQA:
             ))
         return examples
     def read_examples_test(self,input_file):
-        df = pd.read_csv(input_file, sep=',',names = ['id', 'question', 'answer', 'label'],nrows = 1000)
+        df = pd.read_csv(input_file, sep=',',names = ['dialogid', 'userutt', 'resp', 'label'])
         print('行数',df.shape[0])
         examples = []
         for index, row in df.iterrows():
@@ -138,6 +138,6 @@ class DATACQA:
             for feature in features
         ]
 if __name__ == "__main__":
-    a = DATACQA(
+    a = DATADSTC(
         debug=False,
-        data_dir='/home/lsy2018/TextClassification/DATA/DATA_CQA/')
+        data_dir='/home/lsy2018/TextClassification/DATA/DATA_DSTC/')

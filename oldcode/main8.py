@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 # import argparse
-import csv
 import logging
 import os
 import random
@@ -18,7 +17,6 @@ from torch.utils.data.distributed import DistributedSampler
 # from tqdm import tqdm, trange
 
 from sklearn.metrics import f1_score
-import json
 
 from pytorch_transformers.modeling_bertOrigin import BertForSequenceClassification, BertConfig
 from pytorch_transformers import AdamW, WarmupLinearSchedule
@@ -26,7 +24,7 @@ from pytorch_transformers.tokenization_bert import BertTokenizer
 
 from itertools import cycle
 os.environ["CUDA_VISIBLE_DEVICES"]='1'
-from args import args
+from oldcode.args import args
 
 def get_train_logger(log_path = 'log.txt'):
     logger = logging.getLogger('train-{}'.format(__name__))

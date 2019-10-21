@@ -4,7 +4,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--data_dir", default='/home/lsy2018/TextClassification/DATA/DATA_BDCI/data_1020/', type=str, required=False,
                     help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
 parser.add_argument("--model_type", default='bert', type=str, required=False)
-parser.add_argument("--model_name_or_path", default='./PreTraining/chinese_wwm_ext_pytorch', type=str, required=False)
+parser.add_argument("--model_name_or_path", default='./PreTraining/uncased_L-12_H-768_A-12', type=str, required=False)
 parser.add_argument("--meta_path", default=None, type=str, required=False)
 
 ## Other parameters
@@ -75,5 +75,6 @@ parser.add_argument('--overwrite_cache', action='store_true',
                     help="Overwrite the cached training and evaluation sets")
 parser.add_argument('--seed', type=int, default=42,
                     help="random seed for initialization")
+
 
 args = parser.parse_args()

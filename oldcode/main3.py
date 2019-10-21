@@ -15,7 +15,7 @@ import time
 import sys
 import logging
 
-from DATAProcess.LoadDataDSTC8 import DSTC8Data
+from oldcode.LoadDataDSTC8 import DSTC8Data
 
 do_train = True
 

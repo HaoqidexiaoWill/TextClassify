@@ -6,17 +6,14 @@ import random
 import time
 import pandas as pd
 import numpy as np
-import gc
-from itertools import cycle
 from sklearn.metrics import f1_score
 import torch
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, TensorDataset)
-from torch.utils.data.distributed import DistributedSampler
+from torch.utils.data import (DataLoader, SequentialSampler, TensorDataset)
 from pytorch_transformers.modeling_bertOrigin import BertForSequenceClassification, BertConfig
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 from pytorch_transformers.tokenization_bert import BertTokenizer
 
-from args import args
+from oldcode.args import args
 
 def get_train_logger(log_path):
     logger = logging.getLogger('train-{}'.format(__name__))
