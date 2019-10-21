@@ -6,8 +6,6 @@ parser.add_argument("--data_dir", default='/home/lsy2018/TextClassification/DATA
 parser.add_argument("--model_type", default='bert', type=str, required=False)
 parser.add_argument("--model_name_or_path", default='./chinese_wwm_ext_pytorch', type=str, required=False)
 parser.add_argument("--meta_path", default=None, type=str, required=False)
-parser.add_argument("--output_dir", default='./model_bert_fakelabel', type=str, required=False,
-                    help="The output directory where the model predictions and checkpoints will be written.")
 
 ## Other parameters
 parser.add_argument("--config_name", default="", type=str,
@@ -48,7 +46,7 @@ parser.add_argument("--num_train_epochs", default=3.0, type=float,
                     help="Total number of training epochs to perform.")
 parser.add_argument("--max_steps", default=-1, type=int,
                     help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
-parser.add_argument("--eval_steps", default=200, type=int,
+parser.add_argument("--eval_steps", default=10, type=int,
                     help="")
 parser.add_argument("--lstm_hidden_size", default=512, type=int,
                     help="")
@@ -78,13 +76,4 @@ parser.add_argument('--overwrite_cache', action='store_true',
 parser.add_argument('--seed', type=int, default=42,
                     help="random seed for initialization")
 
-parser.add_argument('--fp16', action='store_true',
-                    help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit")
-parser.add_argument('--fp16_opt_level', type=str, default='O1',
-                    help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-                         "See details at https://nvidia.github.io/apex/amp.html")
-parser.add_argument("--local_rank", type=int, default=-1,
-                    help="For distributed training: local_rank")
-parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
-parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
 args = parser.parse_args()

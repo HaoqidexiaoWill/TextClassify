@@ -46,7 +46,7 @@ class DATABDCI:
         print('数据清洗')
         # self.process1014()
         # self.process1016()
-        # self.process1019()
+        self.process1019()
 
     @staticmethod
     def load_data(input_file,n_splits = 5):
@@ -310,7 +310,7 @@ class DATABDCI:
 if __name__ == "__main__":
     a = DATABDCI(
         debug=False,
-        data_dir='/home/lsy2018/文本匹配/DATA/DATA_BDCI/',
+        data_dir='/home/lsy2018/TextClassification/DATA/DATA_BDCI/',
         data_process_output='/home/lsy2018/文本匹配/DATA/DATA_BDCI/data_1014/')
     print('开始处理')
     a.process1019()

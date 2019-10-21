@@ -15,9 +15,6 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Tens
 from torch.utils.data.distributed import DistributedSampler
 
 # from tqdm import tqdm, trange
-
-from sklearn.metrics import f1_score
-
 from pytorch_transformers.modeling_bertLSTM import BertForSequenceClassification, BertConfig
 # from pytorch_transformers.modeling_bert import BertForSequenceClassification, BertConfig
 from pytorch_transformers import AdamW, WarmupLinearSchedule
@@ -27,14 +24,19 @@ from itertools import cycle
 
 from Config.argsBDCI import args
 from Utils.Logger import logger
-from DATAProcess.LoadDataBDCI2 import DATABDCI
-from metric import accuracyBDCI
-os.environ["CUDA_VISIBLE_DEVICES"]='1'
+from DATAProcess.LoadDataCQA import DATACQA
+from metric import accuracyCQA,compute_MRR_CQA,compute_5R20
+os.environ["CUDA_VISIBLE_DEVICES"]='0'
 
 class Trainer:
-    def __init__(self,args):
+    def __init__(self,data_dir,output_dir,num_labels,args):
+
+        self.data_dir = data_dir
+        self.output_dir = output_dir
+        self.num_labels = num_labels
+
+
         self.weight_decay = args.weight_decay
-        self.output_dir = args.output_dir
 
         self.eval_steps = args.eval_steps
         self.gradient_accumulation_steps = args.gradient_accumulation_steps
@@ -42,7 +44,6 @@ class Trainer:
         self.learning_rate = args.learning_rate
         self.adam_epsilon = args.adam_epsilon
         self.train_steps = args.train_steps
-        self.data_dir = args.data_dir
         self.per_gpu_eval_batch_size = args.per_gpu_eval_batch_size
         self.train_batch_size = args.per_gpu_train_batch_size
         self.eval_batch_size = self.per_gpu_eval_batch_size
@@ -54,9 +55,8 @@ class Trainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = BertTokenizer.from_pretrained(self.model_name_or_path, do_lower_case=self.do_lower_case)
 
-        self.do_train = args.do_train
-        self.do_eval = args.do_eval
         self.do_test = args.do_test
+        self.do_eval = True
         self.args = args
 
     def seed_everything(self):
@@ -68,12 +68,11 @@ class Trainer:
         torch.backends.cudnn.deterministic = True
 
     def create_dataloader(self,examples_):
-        data = DATABDCI(
+        data = DATACQA(
             debug = False,
-            data_dir='/home/lsy2018/TextClassification/DATA/DATA_BDCI/',
-            data_process_output='/home/lsy2018/TextClassification/DATA/DATA_BDCI/data_1020/'
+            data_dir= self.data_dir,
         )
-        train_examples = data.read_examples1016(examples_[0])
+        train_examples = data.read_examples(examples_[0])
         train_features = data.convert_examples_to_features(train_examples, self.tokenizer, self.max_seq_length)
         all_input_ids = torch.tensor(data.select_field(train_features, 'input_ids'), dtype=torch.long)
         all_input_mask = torch.tensor(data.select_field(train_features, 'input_mask'), dtype=torch.long)
@@ -84,7 +83,7 @@ class Trainer:
         train_sampler = RandomSampler(train_data)
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=self.train_batch_size)
 
-        eval_examples = data.read_examples1016(examples_[1])
+        eval_examples = data.read_examples(examples_[1])
         eval_features = data.convert_examples_to_features(eval_examples, self.tokenizer, self.max_seq_length)
         all_input_ids = torch.tensor(data.select_field(eval_features, 'input_ids'), dtype=torch.long)
         all_input_mask = torch.tensor(data.select_field(eval_features, 'input_mask'), dtype=torch.long)
@@ -100,15 +99,10 @@ class Trainer:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-        data = DATABDCI(
-            debug = False,
-            data_dir='/home/lsy2018/TextClassification/DATA/DATA_BDCI/',
-            data_process_output='/home/lsy2018/TextClassification/DATA/DATA_BDCI/data_1020/'
-        )
-        data_splitList = DATABDCI.load_data(os.path.join(self.data_dir, 'train.csv'),n_splits=5)
+        data_splitList = DATACQA.load_data(os.path.join(self.data_dir, 'train.csv'),n_splits=5)
         for split_index ,each_data in enumerate(data_splitList):
             # Prepare model
-            config = BertConfig.from_pretrained(self.model_name_or_path, num_labels=3)
+            config = BertConfig.from_pretrained(self.model_name_or_path, num_labels=self.num_labels)
             model = BertForSequenceClassification.from_pretrained(self.model_name_or_path, self.args, config=config)
             model.to(self.device)
 
@@ -177,6 +171,8 @@ class Trainer:
                         inference_labels = []
                         gold_labels = []
                         inference_logits = []
+                        scores = []
+                        questions = [x.text_a for x in eval_examples]
 
                         logger.info("***** Running evaluation *****")
                         logger.info("  Num examples = %d", len(eval_examples))
@@ -204,6 +200,7 @@ class Trainer:
                             logits = logits.detach().cpu().numpy()
                             label_ids = label_ids.to('cpu').numpy()
                             inference_labels.append(np.argmax(logits, axis=1))
+                            scores.append(logits)
                             gold_labels.append(label_ids)
                             inference_logits.append(logits)
                             eval_loss += tmp_eval_loss.mean().item()
@@ -212,12 +209,17 @@ class Trainer:
 
                         gold_labels = np.concatenate(gold_labels, 0)
                         inference_logits = np.concatenate(inference_logits, 0)
+                        scores = np.concatenate(scores, 0)
                         model.train()
                         eval_loss = eval_loss / nb_eval_steps
-                        eval_accuracy = accuracyBDCI(inference_logits, gold_labels)
+                        eval_accuracy = accuracyCQA(inference_logits, gold_labels)
+                        eval_mrr = compute_MRR_CQA(scores,gold_labels,questions)
+                        eval_5R20 = compute_5R20(scores,gold_labels,questions)
 
                         result = {'eval_loss': eval_loss,
                                   'eval_F1': eval_accuracy,
+                                  'eval_MRR':eval_mrr,
+                                  'eval_5R20':eval_5R20,
                                   'global_step': global_step,
                                   'loss': train_loss}
 
@@ -240,17 +242,20 @@ class Trainer:
                             print("=" * 80)
                         else:
                             print("=" * 80)
+
+            del model
+            gc.collect()
     def test(self):
-        data = DATABDCI(
+        data = DATACQA(
             debug=False,
-            data_dir='/home/lsy2018/TextClassification/DATA/DATA_BDCI/',
-            data_process_output='/home/lsy2018/TextClassification/DATA/DATA_BDCI/data_1014/'
+            data_dir=self.data_dir
         )
-        test_examples = data.read_examples(os.path.join(self.data_dir, 'test.csv'), is_training=False)
+        test_examples = data.read_examples(os.path.join(self.data_dir, 'test.csv'))
         print('eval_examples的数量', len(test_examples))
         prediction = np.zeros((len(test_examples),3))
         gold_labels_  = np.zeros((len(test_examples),3))
         logits_ = np.zeros((len(test_examples),3))
+        questions = [x.text_a for x in test_examples]
         test_features = data.convert_examples_to_features(test_examples, self.tokenizer, self.max_seq_length)
         all_input_ids = torch.tensor(data.select_field(test_features, 'input_ids'), dtype=torch.long)
         all_input_mask = torch.tensor(data.select_field(test_features, 'input_mask'), dtype=torch.long)
@@ -264,7 +269,7 @@ class Trainer:
 
         for i in range(5):
 
-            config = BertConfig.from_pretrained(self.model_name_or_path, num_labels=3)
+            config = BertConfig.from_pretrained(self.model_name_or_path, num_labels=self.num_labels)
             model = BertForSequenceClassification.from_pretrained(
                 os.path.join(self.output_dir, "pytorch_model_{}.bin".format(i)), self.args, config=config)
             model.to(self.device)
@@ -291,13 +296,14 @@ class Trainer:
             print(logits.shape)
             print(prediction.shape)
 
-            prediction += logits/3
+            prediction += logits/5
 
 
 
         test_id = [x.guid for x in test_examples]
         assert len(test_id) == len(prediction)
-        print(accuracyBDCI(prediction, gold_labels_))
+        # print(accuracyCQA(prediction, gold_labels_))
+        # print(compute_MRR_CQA(questions))
         logits_ = np.argmax(prediction, axis=1)
 
         submission = pd.DataFrame({
@@ -308,6 +314,10 @@ class Trainer:
 
 
 if __name__ == "__main__":
-    trainer = Trainer(args)
-    # trainer.train()
+    trainer = Trainer(
+        data_dir = '/home/lsy2018/TextClassification/DATA/DATA_CQA/data_1020/',
+        output_dir = './model_BertLSTM_CQA',
+        num_labels= 3,
+        args = args)
+    trainer.train()
     trainer.test()

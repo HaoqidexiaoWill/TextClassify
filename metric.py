@@ -32,16 +32,44 @@ def compute_MRR(scores,labels, ID1,ID2):
     # print(len(ID1),len(ID2))
     assert len(scores) == len(labels) == len(ID1) == len(ID2)
 
+    # scores 第一列的概率值
     result = pd.DataFrame({'scores': scores[:, 1],'logit':np.argmax(scores, axis=1), 'labels': labels,'ID1':ID1,'ID2':ID2})
     result['rank']= result['scores'].groupby(result['ID1']).rank(ascending = False)
     result['rec_rank'] = result['rank'].rdiv(1)
     mrr = result[result['labels'] == 1]['rec_rank'].sum()/(result[result['labels'] == 1].shape[0])
     return mrr
 
+def compute_MRR_CQA(scores,labels, questions):
+    # print(len(scores))
+    # print(len(labels))
+    # print(len(ID1),len(ID2))
+    assert len(scores) == len(labels) == len(questions)
+
+    # scores 第一列的概率值
+    result = pd.DataFrame({'scores': scores[:, 1],'logit':np.argmax(scores, axis=1), 'labels': labels,'questions':questions})
+    result['rank']= result['scores'].groupby(result['questions']).rank(ascending = False)
+    result['rec_rank'] = result['rank'].rdiv(1)
+    mrr = result[result['labels'] == 1]['rec_rank'].sum()/(result[result['labels'] == 1].shape[0])
+    return mrr
+
+def compute_5R20(scores,labels,questions):
+    assert len(scores) == len(labels) == len(questions)
+    # 第一列的概率值
+    result = pd.DataFrame({'scores': scores[:, 1],'logit':np.argmax(scores, axis=1), 'labels': labels,'questions':questions})
+    result['rank']= result['scores'].groupby(result['questions']).rank(ascending = False)
+
+
+    eval_1R5 = result[(result['labels']==1) & (result['rank']<=5)]['labels'].sum()/(result[result['labels'] == 1].shape[0])
+
+    return eval_1R5
+
+
+
+
 def accuracyBDCI(out, labels):
     outputs = np.argmax(out, axis=1)
     return f1_score(labels, outputs, labels=[0, 1, 2], average='macro')
 
-def accuracy(out, labels):
+def accuracyCQA(out, labels):
     outputs = np.argmax(out, axis=1)
     return f1_score(labels, outputs, labels=[0, 1], average='macro')

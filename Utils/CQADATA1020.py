@@ -39,7 +39,25 @@ def read_data(input_file,data_process_output):
     # print(df['question'].head())
     # print(df['answer'].head())
     # 按照句长筛选
-    new_df = df[(df['question'].str.len() >= 64) & (df['question'].str.len() <= 256)& (df['answer'].str.len()>= 64) & (df['answer'].str.len() <= 256)]
+
+    train_data = df.sample(frac=0.8, random_state=0, axis=0)
+    test_data = df[~df.index.isin(train_data.index)]
+    print('traindata:',train_data.shape)
+    print('testdata:',test_data.shape)
+
+    train_data = process_data(train_data)
+    test_data = process_data(test_data)
+
+    print('traindata:',train_data.shape)
+    print('testdata:',test_data.shape)
+    if not os.path.exists(data_process_output): os.makedirs(data_process_output)
+    train_data.to_csv(os.path.join(data_process_output, "train.csv"), index=False, header=False)
+    test_data.to_csv(os.path.join(data_process_output, "test.csv"), index=False, header=False)
+
+
+def process_data(df):
+
+    new_df = df[(df['question'].str.len() >= 128) & (df['question'].str.len() <= 256)& (df['answer'].str.len()>= 128) & (df['answer'].str.len() <= 256)]
     print('行列数', new_df.shape)
     torned_df = df[~df.index.isin(new_df.index)]
     torned_answer = torned_df['answer'].tolist()
@@ -53,11 +71,14 @@ def read_data(input_file,data_process_output):
         label.append('1')
 
         # 负样例
-        question.append(row[0])
-        label.append('0')
+
         # 负样本答案
-        neg_answer = random.sample(torned_answer, 1)
-        answer.append(neg_answer)
+        neg_answer = random.sample(torned_answer, 99)
+        for each in neg_answer:
+
+            answer.append(each)
+            question.append(row[0])
+            label.append('0')
 
     assert len(question) == len(answer) == len(label)
 
@@ -66,16 +87,10 @@ def read_data(input_file,data_process_output):
         'title': question,
         'content': answer,
         'label': label})
+    return data
 
-    train_data = data.sample(frac=0.8, random_state=0, axis=0)
-    test_data = data[~data.index.isin(train_data.index)]
-    print('traindata:',train_data.shape)
-    print('testdata:',test_data.shape)
 
-    if not os.path.exists(data_process_output): os.makedirs(data_process_output)
-    train_data.to_csv(os.path.join(data_process_output, "train.csv"), index=False, header=False)
-    test_data.to_csv(os.path.join(data_process_output, "test.csv"), index=False, header=False)
 
 
 if __name__ == "__main__":
-    read_data('../DATA/CQA/QAPro.txt','/home/lsy2018/文本匹配/DATA/CQA/data_1020/')
+    read_data('../DATA/DATA_CQA/QAPro.txt','/home/lsy2018/TextClassification/DATA/DATA_CQA/data_1020/')
