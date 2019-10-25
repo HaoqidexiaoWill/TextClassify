@@ -73,13 +73,32 @@ def accuracyBDCI(out, labels):
 def accuracyCQA(out, labels):
     outputs = np.argmax(out, axis=1)
     return f1_score(labels, outputs, labels=[0, 1], average='macro')
+
+
+def is_valid_query(each_answer):
+    # 计算指标的时候对答案标签的合法性进行判断避免除0
+    num_pos = 0
+    num_neg = 0
+    for label, score in each_answer:
+        if label > 0:
+            num_pos += 1
+        else:
+            num_neg += 1
+    if num_pos > 0 and num_neg > 0:
+        return True
+    else:
+        return False
+
 def compute_DOUBAN(ID,scores,labels):
-    MRR = 0
+    MRR,num_query = 0,0
     results = defaultdict(list)
     predict = pd.DataFrame({'scores': scores[:, 1],'labels': labels,'ID':ID})
     for index, row in predict.iterrows():
         results[row[2]].append((row[1],row[0]))
+
     for key,value in results.items():
+        if not is_valid_query(value) : continue
+        num_query +=1
         sorted_result = sorted(value, key=operator.itemgetter(1), reverse=True)
         for index_, final_result in enumerate(sorted_result):
             label,scores = final_result
@@ -91,6 +110,30 @@ def compute_DOUBAN(ID,scores,labels):
     predict['rec_rank'] = predict['rank'].rdiv(1)
     mrr = predict[predict['labels'] == 1]['rec_rank'].sum()/(predict[predict['labels'] == 1].shape[0])
 
-    return MRR/len(results),mrr
+    MAP = 0
+    for key ,value in results.items():
+        if not is_valid_query(value): continue
+        sorted_result = sorted(value, key=operator.itemgetter(1), reverse=True)
+        num_relevant_resp = 0
+        AVP = 0 # 每个文档的平均准确率
+        for index_,final_result in enumerate(sorted_result):
+            each_label,each_score = final_result
+            if each_label > 0:
+                num_relevant_resp += 1
+                precision  = num_relevant_resp/(index_+1)
+                AVP += precision
+        AVP = AVP/num_relevant_resp
+        MAP += AVP
+
+    Precision_1 = 0
+    for key, value in results.items():
+        if not is_valid_query(value): continue
+        sorted_result = sorted(value, key=operator.itemgetter(1), reverse=True)
+        # 预测的label取最后概率向量里面最大的那一个作为预测结果
+        label, score = sorted_result[0]
+        if label > 0:
+            Precision_1 += 1
+
+    return MRR/num_query,mrr,MAP/num_query,Precision_1/num_query
 
 

@@ -312,9 +312,12 @@ class Trainer:
         # eval_accuracy = accuracyCQA(inference_logits, gold_labels)
         # eval_mrr = compute_MRR_CQA(scores, gold_labels, questions)
         eval_5R20 = compute_5R20(scores, gold_labels, questions)
-        eval_DOUBAN_MRR,eval_DOUBAN_mrr = compute_DOUBAN(ID,scores,gold_labels)
+        eval_DOUBAN_MRR,eval_DOUBAN_mrr,eval_DOUBAN_MAP,eval_Precision1 = compute_DOUBAN(ID,scores,gold_labels)
         # print('eval_mrr',eval_mrr)
-        print('eval_MRR',eval_DOUBAN_MRR,eval_DOUBAN_mrr)
+        print(
+            'eval_MRR',eval_DOUBAN_MRR,eval_DOUBAN_mrr,
+            'eval_MAP',eval_DOUBAN_MAP,
+            'eval_Precision1',eval_Precision1)
         print('eval_5R20',eval_5R20)
 
 
