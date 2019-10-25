@@ -53,6 +53,19 @@ class DataProcessor(object):
                 lines.append(line)
             return lines
 
+def Nan_handler(data):    
+    if not data["options-for-correct-answers"]:
+        data["options-for-correct-answers"] = [{
+                "candidate-id": '0',
+                "speaker": "unknown",
+                "utterance": "unknown"
+            }]
+        data["options-for-next"].insert(0,{
+                "candidate-id": '0',
+                "utterance": "unknown"
+            })
+        data["options-for-next"].pop()
+    return data
 
 class UbuntuProcessor(DataProcessor):
     def __init__(self):
@@ -64,12 +77,6 @@ class UbuntuProcessor(DataProcessor):
                        os.path.join(os.getcwd(), "dataset/DSTC8/task-2.ubuntu.test.blind.json")][sid], "r") as f:
                 data = json.load(f)
                 self.D.append(data)
-
-        # for sid in range(2):
-        #     with open(["/hdd/lujunyu/dataset/STM/ubuntu_dev_subtask_1.json","/hdd/lujunyu/dataset/STM/ubuntu_dev_subtask_1.json"][sid], "r") as f:
-        #         data = json.load(f)[:100]
-        #         self.D.append(data)
-
 
     def get_train_examples(self):
         """See base class."""
@@ -88,78 +95,44 @@ class UbuntuProcessor(DataProcessor):
 
     def _create_examples(self, data, set_type):
         """Creates examples for the training and dev sets."""
-
-        # if set_type == 'test':
-        #     test_label = []
-        #     with open('./data/ubuntu_responses_subtask_1.tsv', 'r') as tsv_in:
-        #         tsv_reader = csv.reader(tsv_in, delimiter='\t')
-        #         for tsv_item in tsv_reader:
-        #             test_label.append(tsv_item)
-
         examples = []
-
-
-            # for t in d['messages-so-far']:
-            #     context.append(t['utterance'])
         for (i, d) in enumerate(data):
+            d = Nan_handler(d)
             context = []
             candiates = []
             label = None
             if set_type == 'train':
-                if i in range(100,200):
+                if i in range(1000000):
                     for t in d['messages-so-far']:
                         context.append(t['utterance'])
-                    try:
-                        ground_truth = d['options-for-correct-answers'][0]['candidate-id']
-                        for c_id, c in enumerate(d['options-for-next']):
-                            candiates.append(c['utterance'])
-                            if c['candidate-id'] == ground_truth:
-                                label = c_id + 1
-                    except:
-                        label = 0
-                        candiates.insert(0,'unknown')
+                    ground_truth = d['options-for-correct-answers'][0]['candidate-id']
+                    for c_id, c in enumerate(d['options-for-next']):
+                        candiates.append(c['utterance'])
+                        if c['candidate-id'] == ground_truth:
+                            label = c_id 
                     guid = "%s-%s" % (set_type, d['example-id'])
                     examples.append(InputExample(guid=guid, text_a=context, text_b=candiates, label=label))
             if set_type == 'dev':
-                if i in range(100):
+                if i in range(1000000):
                     for t in d['messages-so-far']:
                         context.append(t['utterance'])
-                    try:
-                        ground_truth = d['options-for-correct-answers'][0]['candidate-id']
-                        for c_id, c in enumerate(d['options-for-next']):
-                            candiates.append(c['utterance'])
-                            if c['candidate-id'] == ground_truth:
-                                label = c_id + 1
-                    except:
-                        label = 0
-                        candiates.insert(0,'unknown')
+                    ground_truth = d['options-for-correct-answers'][0]['candidate-id']
+                    for c_id, c in enumerate(d['options-for-next']):
+                        candiates.append(c['utterance'])
+                        if c['candidate-id'] == ground_truth:
+                            label = c_id                    
                     guid = "%s-%s" % (set_type, d['example-id'])
                     examples.append(InputExample(guid=guid, text_a=context, text_b=candiates, label=label))
             if set_type == 'test':
-                if i in range(100):
+                if i in range(1):
                     for t in d['messages-so-far']:
                         context.append(t['utterance'])
-                    try:
-                        ground_truth = d['options-for-correct-answers'][0]['candidate-id']
-                        for c_id, c in enumerate(d['options-for-next']):
-                            candiates.append(c['utterance'])
-                            if c['candidate-id'] == ground_truth:
-                                label = c_id + 1
-                    except:    
-                        label = 0
-                        candiates.insert(0,'unknown')
+                    ground_truth = d['options-for-correct-answers'][0]['candidate-id']
+                    for c_id, c in enumerate(d['options-for-next']):
+                        candiates.append(c['utterance'])
+                        if c['candidate-id'] == ground_truth:
+                            label = c_id                    
                     guid = "%s-%s" % (set_type, d['example-id'])
                     examples.append(InputExample(guid=guid, text_a=context, text_b=candiates, label=label))
                     
-            # else:
-            #     ground_truth = test_label[i][1]
-            #     for c_id, c in enumerate(d['options-for-next']):
-            #         candiates.append(c['utterance'])
-            #         if c['candidate-id'] == ground_truth:
-            #             label = c_id
-
-            # guid = "%s-%s" % (set_type, d['example-id'])
-            # examples.append(
-            #     InputExample(guid=guid, text_a=context, text_b=candiates, label=label))
-
         return examples

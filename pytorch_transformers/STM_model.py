@@ -5,7 +5,7 @@ import math
 import torch
 from torch import nn
 from torch.nn import LSTM, GRU
-# from sru import SRU, SRUCell
+from sru import SRU, SRUCell
 from torch.autograd import Variable
 
 # class MaskGRU(nn.Module):
@@ -76,7 +76,7 @@ class MaskGRU(nn.Module):
 
         return o_unsort
 
-'''
+
 class MaskSRU(nn.Module):
     def __init__(self, in_dim, out_dim, layers=1, batch_first=True, bidirectional=True, dropoutP = 0.5):
         super(MaskSRU, self).__init__()
@@ -102,7 +102,7 @@ class MaskSRU(nn.Module):
         output = H * mask
 
         return output
-'''
+
 class MaskLSTM(nn.Module):
     def __init__(self, in_dim, out_dim, layers=1, batch_first=True, bidirectional=True, dropoutP = 0.5):
         super(MaskLSTM, self).__init__()
@@ -188,8 +188,8 @@ class STM(nn.Module):
         self.max_options_num = args.max_options_num
         self.max_seq_len = args.max_seq_len
         self.rnn_layers = args.rnn_layers
-        print('vocab_size = ',pretrain_embedding.size()[0])
-        self.embedding = nn.Embedding(pretrain_embedding.size()[0], args.emb_dim)
+
+        self.embedding = nn.Embedding(args.vocab_size, args.emb_dim)
         if pretrain_embedding is not None:
             self.embedding.weight.data.copy_(pretrain_embedding)
             self.embedding.weight.requires_grad = True
@@ -199,13 +199,13 @@ class STM(nn.Module):
                                            dropoutP=args.dropoutP)
             self.candidate_encoder = MaskLSTM(in_dim=args.emb_dim, out_dim=args.mem_dim, batch_first=True,
                                             dropoutP=args.dropoutP)
-        # elif args.encoder_type == 'SRU':
-        #     self.context_encoder = nn.ModuleList(
-        #         [MaskSRU(in_dim=args.emb_dim, out_dim=args.mem_dim, batch_first=True,dropoutP=args.dropoutP) for _ in range(args.rnn_layers)]
-        #     )
-        #     self.candidate_encoder = nn.ModuleList(
-        #         [MaskSRU(in_dim=args.emb_dim, out_dim=args.mem_dim, batch_first=True,dropoutP=args.dropoutP) for _ in range(args.rnn_layers)]
-        #     )
+        elif args.encoder_type == 'SRU':
+            self.context_encoder = nn.ModuleList(
+                [MaskSRU(in_dim=args.emb_dim, out_dim=args.mem_dim, batch_first=True,dropoutP=args.dropoutP) for _ in range(args.rnn_layers)]
+            )
+            self.candidate_encoder = nn.ModuleList(
+                [MaskSRU(in_dim=args.emb_dim, out_dim=args.mem_dim, batch_first=True,dropoutP=args.dropoutP) for _ in range(args.rnn_layers)]
+            )
         else:
             self.context_encoder = nn.ModuleList(
                 [MaskGRU(in_dim=args.emb_dim, out_dim=args.mem_dim, batch_first=True,dropoutP=args.dropoutP) for _ in range(args.rnn_layers)]
@@ -246,39 +246,21 @@ class STM(nn.Module):
         ###
         context_seq_len_inputs = context_seq_len.view(-1)
         candidate_seq_len_inputs = candidate_seq_len.view(-1)
-        
-        # exit()
 
         all_context_hidden = [contexts_emb]
         all_candidate_hidden = [candidates_emb]
-        print(candidates_emb.size())
-        
-
         for layer_id in range(self.rnn_layers):
-            # print(contexts_emb.size())
-            # print(all_context_hidden[-1].size())
-            # exit()
-            # print(self.max_seq_len, self.emb_dim)
             contexts_inputs = all_context_hidden[-1].view(-1, self.max_seq_len, self.emb_dim)
             candidates_inputs = all_candidate_hidden[-1].view(-1, self.max_seq_len, self.emb_dim)
-            # print(contexts_inputs.size())
-            # exit()
+
             contexts_hidden = self.context_encoder[layer_id](contexts_inputs, context_seq_len_inputs)
             candidates_hidden = self.candidate_encoder[layer_id](candidates_inputs, candidate_seq_len_inputs)
 
             all_context_hidden.append(contexts_hidden.view(-1, self.max_turns_num, self.max_seq_len, 2*self.mem_dim))
             all_candidate_hidden.append(candidates_hidden.view(-1, self.max_options_num, self.max_seq_len, 2 * self.mem_dim))
-        
 
         all_context_hidden = torch.stack(all_context_hidden, dim=1)
-        try:
-            all_candidate_hidden = torch.stack(all_candidate_hidden, dim=2)
-        except Exception as e:
-            print(e)
-            print(len(all_candidate_hidden))
-            for i in all_candidate_hidden:
-                print(i.size())
-            exit()
+        all_candidate_hidden = torch.stack(all_candidate_hidden, dim=2)
 
         spatio_temproal_features = torch.einsum('bltik, boljk->boltij', (all_context_hidden, all_candidate_hidden)) / math.sqrt(300)
 
@@ -287,7 +269,7 @@ class STM(nn.Module):
         logits = self.extractor(spatio_temproal_features)
 
         logits = logits.view(-1, self.max_options_num)
-        # print(logits.size(), labels_ids)
+
         loss = self.criterion(logits, labels_ids)
 
         return loss, logits

@@ -4,9 +4,13 @@ import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import argparse
-from oldcode import evaluation as eva
-from oldcode.processor import UbuntuProcessor
-from oldcode.STMDataLoader import build_corpus_dataloader, build_corpus_tokenizer, build_corpus_embedding
+# from oldcode import evaluation as eva
+# from oldcode.processor import UbuntuProcessor
+# from oldcode.STMDataLoader import build_corpus_dataloader, build_corpus_tokenizer, build_corpus_embedding
+import evaluation as eva
+from processor_edit2 import UbuntuProcessor
+from STMDataLoader_edit import build_corpus_dataloader, build_corpus_tokenizer, build_corpus_embedding
+from models import STM
 import pickle
 import torch
 import torch.optim as optim
@@ -15,6 +19,8 @@ import matplotlib.pyplot as plt
 # plt.interactive(False)
 # plt.figure(figsize=(20,30))
 import logging
+import gc
+
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
                     level = logging.INFO)
@@ -52,11 +58,11 @@ def main():
                         help='model name')
     parser.add_argument('--encoder_type', type=str, default='GRU',
                         help='encoder:[GRU, LSTM, SRU, Transoformer]')
-    parser.add_argument('--vocab_size', type=int, default=300000,
+    parser.add_argument('--vocab_size', type=int, default=2147097,
                         help='vocabulary size')
     parser.add_argument('--max_turns_num', type=int, default=9,
                         help='the max turn number in dialogue context')
-    parser.add_argument('--max_options_num', type=int, default=100,
+    parser.add_argument('--max_options_num', type=int, default=5,
                         help='the max turn number in dialogue context')
     parser.add_argument('--max_seq_len', type=int, default=50,
                         help='the max length of the input sequence')
@@ -65,14 +71,14 @@ def main():
                         help='size of word embeddings')
     parser.add_argument('--rnn_layers', type=int, default=3,
                         help='the number of rnn layers for feature extraction')
-    parser.add_argument('--mem_dim', type=int, default=150,
+    parser.add_argument('--mem_dim', type=int, default=200,
                         help='hidden memory size')
 
-    parser.add_argument('--lr', type=float, default=0.001,
+    parser.add_argument('--lr', type=float, default=0.01,
                         help='initial learning rate')
-    parser.add_argument('--epochs', type=int, default=5,
+    parser.add_argument('--epochs', type=int, default=100,
                         help='upper epoch limit')
-    parser.add_argument('--batch_size', type=int, default=10, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=1, metavar='N',
                         help='batch size')
     parser.add_argument('--dropoutP', type=float, default=0.2,
                         help='dropout ratio')
@@ -94,7 +100,7 @@ def main():
                         help='training or not')
     parser.add_argument('--do_eval', type=bool, default=True,
                         help='evaluate or not')
-    parser.add_argument('--do_test', type=bool, default=True,
+    parser.add_argument('--do_test', type=bool, default=False,
                         help='test or not')
 
     args = parser.parse_args()
@@ -125,16 +131,21 @@ def main():
     #     tokenizer = build_corpus_tokenizer(train_examples, args.vocab_size)
     #     with open(os.path.join(args.cache_path, 'cache_tokenizer.pkl'), 'wb') as ff:
     #         pickle.dump(tokenizer, ff)
-    tokenizer = build_corpus_tokenizer(train_examples, args.vocab_size)
+    tokenizer = build_corpus_tokenizer(train_examples)
 
     if args.cache_path and os.path.exists(os.path.join(args.cache_path, 'cache_dataset.pt')):
         with open(os.path.join(args.cache_path, 'cache_dataset.pt'), 'rb') as f:
             train_dataset, eval_dataset, test_dataset = pickle.load(f)
     else:
         train_dataset = build_corpus_dataloader(train_examples, args.max_turns_num, args.max_seq_len,tokenizer)
+        # eval_dataset = build_corpus_dataloader(eval_examples, args.max_turns_num, args.max_seq_len, tokenizer)
+        # test_dataset = build_corpus_dataloader(test_examples, args.max_turns_num, args.max_seq_len, tokenizer)
         eval_dataset = build_corpus_dataloader(eval_examples, args.max_turns_num, args.max_seq_len, tokenizer)
         test_dataset = build_corpus_dataloader(test_examples, args.max_turns_num, args.max_seq_len, tokenizer)
-
+        del train_examples
+        del eval_examples
+        del test_examples
+        gc.collect()
         with open(os.path.join(args.cache_path, 'cache_dataset.pt'), 'wb') as f:
             pickle.dump((train_dataset, eval_dataset, test_dataset), f)
 
@@ -148,7 +159,7 @@ def main():
             pretrained_embedding = pickle.load(f)
     else:
         if args.pretrain_embedding:
-            pretrained_embedding, vocab = build_corpus_embedding(args.vocab_size, args.emb_dim, args.pretrain_embedding, tokenizer)
+            pretrained_embedding, vocab = build_corpus_embedding(args.emb_dim, args.pretrain_embedding, tokenizer)
         else:
             pretrained_embedding = None
             vocab = []
@@ -187,6 +198,8 @@ def main():
                 batch = tuple(t.to(device) for t in batch)
                 contexts_ids, candidate_ids, label_ids = batch
                 loss, _ = model(contexts_ids, candidate_ids, label_ids)
+                del _
+                gc.collect()
                 loss.backward()
 
                 # if step % 20 == 0 and step != 0:
@@ -236,9 +249,10 @@ def main():
                 # write evaluation result
                 eval_result = eva.evaluate(os.path.join(args.save_path,'eval_score.txt'))
                 eval_result_file_path = os.path.join(args.save_path, 'eval_result.txt')
-                with open(eval_result_file_path, 'w') as out_file:
+                with open(eval_result_file_path, 'a') as out_file:
                     for p_at in eval_result:
-                        out_file.write(str(p_at) + '\n')
+                        out_file.write(str(p_at) + '\t')
+                    out_file.write('\n')
 
                 if eval_result[0] > best_result[0]:
                     save_path = os.path.join(args.save_path, 'model_best.pt')
@@ -246,6 +260,7 @@ def main():
                     torch.save([model, optimizer], save_path)
                     logger.info('eval loss: %2.4f' % eval_loss)
                     logger.info("best result: %2.4f" % best_result[0])
+                    logger.info("mrr score: %2.4f" % best_result[5])
                     logger.info("succ saving model in %s" % save_path)
 
                 model.train()

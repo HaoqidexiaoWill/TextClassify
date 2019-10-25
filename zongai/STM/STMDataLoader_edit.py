@@ -105,15 +105,22 @@ def build_corpus_dataloader(examples, max_turn_length, max_seq_length, vocab_tab
         else:
             tokens_a = tokens_a[-max_turn_length:]
 
-        max_candidate_len = 100
+        max_candidate_len = 5
         if len(tokens_b) < max_candidate_len:
             if tokens_b:
                 tokens_b = np.concatenate([tokens_b,np.zeros([max_candidate_len - len(tokens_b), max_seq_length])])
             else:
                 tokens_b = np.zeros([max_candidate_len, max_seq_length])
         else:
-            tokens_b = tokens_b[-max_candidate_len:]
-
+            if example.label >= max_candidate_len:
+                true_ans = tokens_b[example.label]
+                tokens_b = tokens_b[:max_candidate_len-1]
+                example.label = np.random.randint(len(tokens_b)+1)
+                tokens_b.insert(example.label, true_ans)
+            else:
+                tokens_b = tokens_b[:max_candidate_len]
+            
+        
         assert len(tokens_a) == max_turn_length
         assert len(tokens_b) == max_candidate_len
 
@@ -126,6 +133,7 @@ def build_corpus_dataloader(examples, max_turn_length, max_seq_length, vocab_tab
     all_candidates = torch.LongTensor(candidates)
     all_labels = torch.LongTensor(labels)
 
+
     # for i in all_labels:
     #     if i == -1:
     #         print(i)
@@ -136,7 +144,7 @@ def build_corpus_dataloader(examples, max_turn_length, max_seq_length, vocab_tab
 
     return tensor_dataset
 
-def build_corpus_embedding( emb_dim, pretrain_dir, vocab_table):
+def build_corpus_embedding(emb_dim, pretrain_dir, vocab_table):
 
     ### Get vocabulary
     vocab = ['<PAD>'] + list(vocab_table.keys())#[:vocab_size-1]

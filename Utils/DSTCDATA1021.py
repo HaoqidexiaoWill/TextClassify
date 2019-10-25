@@ -14,8 +14,8 @@ def read_data(input_file, output_file):
     train_file = os.path.join(input_file, 'train.txt')
     test_file = os.path.join(input_file, 'dev.txt')
 
-    train_df = pd.read_csv(train_file, sep='\t',names=['dialogid', 'userutt', 'answerid', 'resp', 'label'],nrows=1000)
-    test_df = pd.read_csv(test_file, sep='\t',names=['dialogid', 'userutt', 'answerid', 'resp', 'label'],nrows=1000)
+    train_df = pd.read_csv(train_file, sep='\t',names=['dialogid', 'userutt', 'answerid', 'resp', 'label'])
+    test_df = pd.read_csv(test_file, sep='\t',names=['dialogid', 'userutt', 'answerid', 'resp', 'label'])
 
 
     train_data = process_data(train_df)
@@ -31,7 +31,7 @@ def read_data(input_file, output_file):
 
 def process_data(df):
     df.dropna(how='any', inplace=True)
-    new_df = df.drop(columns=['dialogid'],axis = 1)
+    new_df = df.drop(columns=['answerid'],axis = 1)
     return new_df
 
 
