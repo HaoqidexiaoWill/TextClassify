@@ -16,7 +16,9 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Tens
 from torch.utils.data.distributed import DistributedSampler
 
 # from tqdm import tqdm, trange
-from pytorch_transformers.modeling_bertLSTM import BertForSequenceClassification, BertConfig
+from pytorch_transformers.modeling_bertLSTM import BertConfig,BertForSequenceClassification
+# from pytorch_transformers.modeling_RE2 import BertForSequenceClassification
+# from pytorch_transformers.modeling_bertRCNN import BertForSequenceClassification
 # from pytorch_transformers.modeling_bert import BertForSequenceClassification, BertConfig
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 from pytorch_transformers.tokenization_bert import BertTokenizer
@@ -312,7 +314,10 @@ class Trainer:
         # eval_accuracy = accuracyCQA(inference_logits, gold_labels)
         # eval_mrr = compute_MRR_CQA(scores, gold_labels, questions)
         eval_5R20 = compute_5R20(scores, gold_labels, questions)
+        # print(scores)
+        # print(scores.shape)
         eval_DOUBAN_MRR,eval_DOUBAN_mrr,eval_DOUBAN_MAP,eval_Precision1 = compute_DOUBAN(ID,scores,gold_labels)
+        exit()
         # print('eval_mrr',eval_mrr)
         print(
             'eval_MRR',eval_DOUBAN_MRR,eval_DOUBAN_mrr,
