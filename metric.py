@@ -6,7 +6,7 @@ import torch
 from sklearn.metrics import f1_score
 from collections import defaultdict
 import operator
-
+from sklearn.metrics import recall_score
 
 def obtain_TP_TN_FN_FP(pred, act, TP, TN, FN, FP, elem_wise=False):
     if isinstance(pred, torch.Tensor):
@@ -135,5 +135,30 @@ def compute_DOUBAN(ID,scores,labels):
             Precision_1 += 1
 
     return MRR/num_query,mrr,MAP/num_query,Precision_1/num_query
+
+
+def Douban_r_at_k(ID,scores,labels,k):
+    """count if true answer is in topk"""
+    # pred_labels = torch.topk(scores, 2, largest=True, sorted=True)[1].data.squeeze()[:,1]
+    # print(pred_labels)
+    # exit()
+
+    results = defaultdict(list)
+    predict = pd.DataFrame({'scores': scores[:, 1],'labels': labels,'ID':ID})
+    for index, row in predict.iterrows():
+        results[row[2]].append((row[1],row[0]))
+    for key ,value in results.items():
+        if not is_valid_query(value): continue
+    group_by_id = predict.groupby('ID')
+    r_at_k = 0
+    num_query = 0
+    for group in group_by_id:
+        topk = group[1].sort_values(by='scores',ascending=False)[:k]
+        if any(topk['labels']):
+            r_at_k += 1
+        num_query += 1
+    r_at_k = r_at_k/num_query
+    return r_at_k
+
 
 

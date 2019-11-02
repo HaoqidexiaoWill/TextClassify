@@ -1,18 +1,23 @@
 from __future__ import absolute_import
 
+import argparse
+import logging
 import os
 import random
+import sys
 import time
 from io import open
 import pandas as pd
 import numpy as np
 import torch
+import gc
 
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, TensorDataset)
+from torch.utils.data.distributed import DistributedSampler
 
 # from tqdm import tqdm, trange
-from pytorch_transformers.modeling_bertDPCNN import BertConfig,BertForSequenceClassification
-# from pytorch_transformers.modeling_RE2 import BertForSequenceClassification
+from pytorch_transformers.modeling_bertLSTM import BertConfig
+from pytorch_transformers.modeling_bertHAN import BertForSequenceClassification
 # from pytorch_transformers.modeling_bertRCNN import BertForSequenceClassification
 # from pytorch_transformers.modeling_bert import BertForSequenceClassification, BertConfig
 from pytorch_transformers import AdamW, WarmupLinearSchedule
@@ -22,9 +27,9 @@ from itertools import cycle
 
 from Config.argsDOUBAN import args
 from Utils.Logger import logger
-from oldcode.LoadDataDouBan import DATADOUBAN
+from DATAProcess.LoadDataDouBan2 import DATADOUBAN
 from metric import accuracyCQA,compute_MRR_CQA,compute_5R20,compute_DOUBAN
-os.environ["CUDA_VISIBLE_DEVICES"]='0'
+os.environ["CUDA_VISIBLE_DEVICES"]='1'
 
 class Trainer:
     def __init__(self,data_dir,output_dir,num_labels,args):
@@ -309,8 +314,6 @@ class Trainer:
         # eval_accuracy = accuracyCQA(inference_logits, gold_labels)
         # eval_mrr = compute_MRR_CQA(scores, gold_labels, questions)
         eval_5R20 = compute_5R20(scores, gold_labels, questions)
-        # print(type(ID), type(scores), type(gold_labels))
-        # exit()
         eval_DOUBAN_MRR,eval_DOUBAN_mrr,eval_DOUBAN_MAP,eval_Precision1 = compute_DOUBAN(ID,scores,gold_labels)
         # print('eval_mrr',eval_mrr)
         print(
@@ -392,11 +395,11 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         data_dir = '/home/lsy2018/TextClassification/DATA/DATA_DOUBAN/data_1024/',
-        output_dir = './model_BertDPCNN_DOUBAN',
+        output_dir = './model_BertHAN_DOUBAN',
         # DOUBAN 是二分类
         num_labels= 2,
         args = args)
-    # trainer.train()
+    trainer.train()
     time_start = time.time()
     trainer.test_eval()
     print('1000条测试运行时间',time.time()-time_start,'s')

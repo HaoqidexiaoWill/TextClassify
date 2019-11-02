@@ -14,7 +14,7 @@ parser.add_argument("--tokenizer_name", default="", type=str,
                     help="Pretrained tokenizer name or path if not the same as model_name")
 parser.add_argument("--cache_dir", default="", type=str,
                     help="Where do you want to store the pre-trained models downloaded from s3")
-parser.add_argument("--max_seq_length", default=128, type=int,
+parser.add_argument("--max_seq_length", default=64, type=int,
                     help="The maximum total input sequence length after tokenization. Sequences longer "
                          "than this will be truncated, sequences shorter will be padded.")
 parser.add_argument("--do_train", action='store_true',
@@ -30,7 +30,7 @@ parser.add_argument("--do_lower_case", action='store_true',
 
 parser.add_argument("--per_gpu_train_batch_size", default=32, type=int,
                     help="Batch size per GPU/CPU for training.")
-parser.add_argument("--per_gpu_eval_batch_size", default=16, type=int,
+parser.add_argument("--per_gpu_eval_batch_size", default=8, type=int,
                     help="Batch size per GPU/CPU for evaluation.")
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                     help="Number of updates steps to accumulate before performing a backward/update pass.")

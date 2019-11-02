@@ -26,11 +26,12 @@ class InputFeatures(object):
         self.example_id = example_id
         self.choices_features = [
             {
-                'input_ids': input_ids,
-                'input_mask': input_mask,
-                'segment_ids': segment_ids
+                'utt_input_ids': utt_input_ids,
+                'utt_input_mask': utt_input_mask,
+                'resp_input_ids': resp_input_ids,
+                'resp_input_mask': resp_input_mask,
             }
-            for _, input_ids, input_mask, segment_ids in choices_features
+            for _, utt_input_ids, utt_input_mask, _, resp_input_ids, resp_input_mask in choices_features
         ]
         self.label = label
 class DATADOUBAN:
@@ -72,26 +73,37 @@ class DATADOUBAN:
             context_tokens = tokenizer.tokenize(example.text_a)
             ending_tokens = tokenizer.tokenize(example.text_b)
 
+
+
             choices_features = []
-            self._truncate_seq_pair(context_tokens, ending_tokens, max_seq_length - 3)
+            context_tokens, ending_tokens = self._truncate_seq_pair(context_tokens, ending_tokens, max_seq_length - 2)
             # self.truncature(context_tokens, ending_tokens, max_seq_length)
-            tokens = ["[CLS]"] + ending_tokens + ["[SEP]"] + context_tokens + ["[SEP]"]
-            segment_ids = [0] * (len(ending_tokens) + 2) + [1] * (len(context_tokens) + 1)
-            input_ids = tokenizer.convert_tokens_to_ids(tokens)
-            input_mask = [1] * len(input_ids)
+            # tokens = ["[CLS]"] + ending_tokens + ["[SEP]"] + context_tokens + ["[SEP]"]
+            utt_tokens = ["[CLS]"] + context_tokens + ["[SEP]"]
+            resp_tokens = ["[CLS]"] + ending_tokens + ["[SEP]"]
+            # segment_ids = [0] * (len(ending_tokens) + 2) + [1] * (len(context_tokens) + 1)
+            # input_ids = tokenizer.convert_tokens_to_ids(tokens)
+            utt_input_ids = tokenizer.convert_tokens_to_ids(utt_tokens)
+            resp_input_ids = tokenizer.convert_tokens_to_ids(resp_tokens)
+            # input_mask = [1] * len(input_ids)
+            utt_input_mask = [1] * len(utt_input_ids)
+            resp_input_mask = [1] * len(resp_input_ids)
 
-            padding_length = max_seq_length - len(input_ids)
-            input_ids += ([0] * padding_length)
-            input_mask += ([0] * padding_length)
-            segment_ids += ([0] * padding_length)
-            choices_features.append((tokens, input_ids, input_mask, segment_ids))
-
+            utt_padding_length = max_seq_length - len(utt_input_ids)
+            resp_padding_length = max_seq_length - len(resp_input_ids)
+            utt_input_ids += ([0] * utt_padding_length)
+            resp_input_ids += ([0] * resp_padding_length)
+            utt_input_mask += ([0] * utt_padding_length)
+            resp_input_mask += ([0] * resp_padding_length)
+            # segment_ids += ([0] * padding_length)
+            # choices_features.append((tokens, input_ids, input_mask, segment_ids))
+            choices_features.append((utt_tokens, utt_input_ids, utt_input_mask, resp_tokens, resp_input_ids, resp_input_mask))
             label = example.label
             if example_index <3:
                 logger.info("*** Example ***")
                 logger.info("idx: {}".format(example_index))
                 logger.info("guid: {}".format(example.guid))
-                logger.info("tokens: {}".format(' '.join(tokens).replace('\u2581', '_')))
+                logger.info("tokens: {}".format(' '.join(utt_tokens+resp_tokens).replace('\u2581', '_')))
                 logger.info("label: {}".format(label))
             features.append(
                 InputFeatures(
@@ -132,15 +144,9 @@ class DATADOUBAN:
 
 
     def _truncate_seq_pair(self,tokens_a, tokens_b, max_length):
-
-        while True:
-            total_length = len(tokens_a) + len(tokens_b)
-            if total_length <= max_length:
-                break
-            if len(tokens_a) > len(tokens_b):
-                tokens_a.pop(0)
-            else:
-                tokens_b.pop()
+        tokens_a = tokens_a[-max_length:]
+        tokens_b = tokens_b[-max_length:]
+        return tokens_a, tokens_b
 
 
     def select_field(self,features, field):
