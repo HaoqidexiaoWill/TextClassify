@@ -39,7 +39,7 @@ class DATADOUBAN:
         self.data_dir = data_dir
 
     def read_examples(self,input_file):
-        df = pd.read_csv(input_file, sep=',',names = ['dialogid', 'utterance', 'response', 'label'])
+        df = pd.read_csv(input_file, sep=',',names = ['dialogid', 'utterance', 'response', 'label'],nrows = 100)
         print('行数',df.shape[0])
         examples = []
         for index, row in df.iterrows():
@@ -138,7 +138,7 @@ class DATADOUBAN:
             if total_length <= max_length:
                 break
             if len(tokens_a) > len(tokens_b):
-                tokens_a.pop(0)
+                tokens_a.pop()
             else:
                 tokens_b.pop()
 

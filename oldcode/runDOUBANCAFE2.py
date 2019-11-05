@@ -1,25 +1,16 @@
 from __future__ import absolute_import
 
-import argparse
-import logging
 import os
 import random
-import sys
 import time
 from io import open
 import pandas as pd
 import numpy as np
 import torch
-import gc
 
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, TensorDataset)
-from torch.utils.data.distributed import DistributedSampler
-
-# from tqdm import tqdm, trange
 from pytorch_transformers.modeling_bertLSTM import BertConfig
-from pytorch_transformers.modeling_CAFE import BertForSequenceClassification
-# from pytorch_transformers.modeling_bertRCNN import BertForSequenceClassification
-# from pytorch_transformers.modeling_bert import BertForSequenceClassification, BertConfig
+from oldcode.modeling_RE4 import BertForSequenceClassification
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 from pytorch_transformers.tokenization_bert import BertTokenizer
 
@@ -27,7 +18,7 @@ from itertools import cycle
 
 from Config.argsDOUBAN import args
 from Utils.Logger import logger
-from DATAProcess.LoadDataDouBan2 import DATADOUBAN
+from oldcode.LoadDataDouban3 import DATADOUBAN
 from metric import accuracyCQA,compute_MRR_CQA,compute_5R20,compute_DOUBAN
 os.environ["CUDA_VISIBLE_DEVICES"]='1'
 
@@ -77,34 +68,35 @@ class Trainer:
         )
         train_examples = data.read_examples(os.path.join(self.data_dir,'train.csv'))
         train_features = data.convert_examples_to_features(train_examples, self.tokenizer, self.max_seq_length)
-        all_input_ids = torch.tensor(data.select_field(train_features, 'input_ids'), dtype=torch.long)
-        all_input_mask = torch.tensor(data.select_field(train_features, 'input_mask'), dtype=torch.long)
-        all_segment_ids = torch.tensor(data.select_field(train_features, 'segment_ids'), dtype=torch.long)
+        all_input_ids_utt = torch.tensor(data.select_field(train_features, 'input_ids_utt'), dtype=torch.long)
+        all_input_mask_utt = torch.tensor(data.select_field(train_features, 'input_mask_utt'), dtype=torch.long)
+        all_segment_ids_utt = torch.tensor(data.select_field(train_features, 'segment_ids_utt'), dtype=torch.long)
+        all_input_ids_resp = torch.tensor(data.select_field(train_features, 'input_ids_resp'), dtype=torch.long)
+        all_input_mask_resp = torch.tensor(data.select_field(train_features, 'input_mask_resp'), dtype=torch.long)
+        all_segment_ids_resp = torch.tensor(data.select_field(train_features, 'segment_ids_resp'), dtype=torch.long)
+
         all_label = torch.tensor([f.label for f in train_features], dtype=torch.long)
-        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label)
+        train_data = TensorDataset(
+            all_input_ids_utt, all_input_mask_utt, all_segment_ids_utt,
+            all_input_ids_resp,all_input_mask_resp,all_segment_ids_resp,all_label)
 
         train_sampler = RandomSampler(train_data)
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=self.train_batch_size)
 
-        '''
-        eval_examples = data.read_examples(examples_[1])
-        eval_features = data.convert_examples_to_features(eval_examples, self.tokenizer, self.max_seq_length)
-        all_input_ids = torch.tensor(data.select_field(eval_features, 'input_ids'), dtype=torch.long)
-        all_input_mask = torch.tensor(data.select_field(eval_features, 'input_mask'), dtype=torch.long)
-        all_segment_ids = torch.tensor(data.select_field(eval_features, 'segment_ids'), dtype=torch.long)
-        all_label = torch.tensor([f.label for f in eval_features], dtype=torch.long)
-        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label)
-        eval_sampler = SequentialSampler(eval_data)
-        eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=self.eval_batch_size)
-        '''
 
         eval_examples = data.read_examples(os.path.join(self.data_dir, 'dev.csv'))
         eval_features = data.convert_examples_to_features(eval_examples, self.tokenizer, self.max_seq_length)
-        all_input_ids = torch.tensor(data.select_field(eval_features, 'input_ids'), dtype=torch.long)
-        all_input_mask = torch.tensor(data.select_field(eval_features, 'input_mask'), dtype=torch.long)
-        all_segment_ids = torch.tensor(data.select_field(eval_features, 'segment_ids'), dtype=torch.long)
+        all_input_ids_utt = torch.tensor(data.select_field(eval_features, 'input_ids_utt'), dtype=torch.long)
+        all_input_mask_utt = torch.tensor(data.select_field(eval_features, 'input_mask_utt'), dtype=torch.long)
+        all_segment_ids_utt = torch.tensor(data.select_field(eval_features, 'segment_ids_utt'), dtype=torch.long)
+        all_input_ids_resp = torch.tensor(data.select_field(eval_features, 'input_ids_resp'), dtype=torch.long)
+        all_input_mask_resp = torch.tensor(data.select_field(eval_features, 'input_mask_resp'), dtype=torch.long)
+        all_segment_ids_resp = torch.tensor(data.select_field(eval_features, 'segment_ids_resp'), dtype=torch.long)
+
         all_label = torch.tensor([f.label for f in eval_features], dtype=torch.long)
-        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label)
+        eval_data = TensorDataset(
+            all_input_ids_utt, all_input_mask_utt, all_segment_ids_utt,
+            all_input_ids_resp,all_input_mask_resp,all_segment_ids_resp,all_label)
         eval_sampler = SequentialSampler(eval_data)
         eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=self.eval_batch_size)
 
@@ -154,12 +146,19 @@ class Trainer:
         for step in range(num_train_optimization_steps):
             batch = next(train_dataloader)
             batch = tuple(t.to(self.device) for t in batch)
-            input_ids, input_mask, segment_ids, label_ids = batch
-            loss = model(input_ids=input_ids, token_type_ids=segment_ids, attention_mask=input_mask, labels=label_ids)
+            input_ids_utt, input_mask_utt, segment_ids_utt,input_ids_resp, input_mask_resp, segment_ids_resp, all_label = batch
+            loss = model(
+                input_ids_utt=input_ids_utt,
+                token_type_ids_utt=segment_ids_utt,
+                attention_mask_utt=input_mask_utt,
+                input_ids_resp=input_ids_resp,
+                token_type_ids_resp=segment_ids_resp,
+                attention_mask_resp=input_mask_resp,
+                labels=all_label)
             tr_loss += loss.item()
             train_loss = round(tr_loss / (nb_tr_steps + 1), 4)
 
-            nb_tr_examples += input_ids.size(0)
+            nb_tr_examples += input_ids_utt.size(0)
             nb_tr_steps += 1
 
             loss.backward()
@@ -196,19 +195,32 @@ class Trainer:
                     model.eval()
                     eval_loss, eval_accuracy = 0, 0
                     nb_eval_steps, nb_eval_examples = 0, 0
-                    for input_ids, input_mask, segment_ids, label_ids in eval_dataloader:
-                        input_ids = input_ids.to(self.device)
-                        input_mask = input_mask.to(self.device)
-                        segment_ids = segment_ids.to(self.device)
+                    for input_ids_utt, input_mask_utt, segment_ids_utt, \
+                        input_ids_resp,input_mask_resp,segment_ids_resp,label_ids in eval_dataloader:
+                        input_ids_utt = input_ids_utt.to(self.device)
+                        input_mask_utt = input_mask_utt.to(self.device)
+                        segment_ids_utt = segment_ids_utt.to(self.device)
+                        input_ids_resp = input_ids_resp.to(self.device)
+                        input_mask_resp = input_mask_resp.to(self.device)
+                        segment_ids_resp = segment_ids_resp.to(self.device)
                         label_ids = label_ids.to(self.device)
 
                         with torch.no_grad():
                             tmp_eval_loss = model(
-                                input_ids=input_ids,
-                                token_type_ids=segment_ids,
-                                attention_mask=input_mask,
+                                input_ids_utt=input_ids_utt,
+                                token_type_ids_utt=segment_ids_utt,
+                                attention_mask_utt=input_mask_utt,
+                                input_ids_resp=input_ids_resp,
+                                token_type_ids_resp=segment_ids_resp,
+                                attention_mask_resp=input_mask_resp,
                                 labels=label_ids)
-                            logits = model(input_ids=input_ids, token_type_ids=segment_ids, attention_mask=input_mask)
+                            logits = model(
+                                input_ids_utt=input_ids_utt,
+                                token_type_ids_utt=segment_ids_utt,
+                                attention_mask_utt=input_mask_utt,
+                                input_ids_resp=input_ids_resp,
+                                token_type_ids_resp=segment_ids_resp,
+                                attention_mask_resp=input_mask_resp)
 
                         logits = logits.detach().cpu().numpy()
                         label_ids = label_ids.to('cpu').numpy()
@@ -217,7 +229,7 @@ class Trainer:
                         gold_labels.append(label_ids)
                         inference_logits.append(logits)
                         eval_loss += tmp_eval_loss.mean().item()
-                        nb_eval_examples += input_ids.size(0)
+                        nb_eval_examples += input_ids_utt.size(0)
                         nb_eval_steps += 1
 
                     gold_labels = np.concatenate(gold_labels, 0)
@@ -408,7 +420,7 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         data_dir = '/home/lsy2018/TextClassification/DATA/DATA_DOUBAN/data_1024/',
-        output_dir = './model_BertCAFE_DOUBAN',
+        output_dir = './model_BertCAFE2_DOUBAN',
         # DOUBAN 是二分类
         num_labels= 2,
         args = args)

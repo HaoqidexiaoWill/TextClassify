@@ -13,8 +13,8 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 from pytorch_transformers.modeling_bertLSTM import BertPreTrainedModel,BertModel
 
-from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
-                             prune_linear_layer, add_start_docstrings)
+from pytorch_transformers.modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
+                                                 prune_linear_layer, add_start_docstrings)
 
 class ResnetBlock(nn.Module):
     def __init__(self, channel_size):
@@ -229,8 +229,8 @@ class BertForSequenceClassification(BertPreTrainedModel):
                                       attention_mask=flat_attention_mask, head_mask=head_mask)
         encoded_layers = self.dropout(encoded_layers)
 
-        # print(token_type_ids.size())
-        # exit()
+        print(token_type_ids.size())
+        exit()
         textA_mask = token_type_ids.transpose(1,2).expand_as(encoded_layers)
         utternace = encoded_layers.mul(textA_mask.float())
         textB_mask = torch.sub(torch.ones_like(encoded_layers).float(), textA_mask.float())

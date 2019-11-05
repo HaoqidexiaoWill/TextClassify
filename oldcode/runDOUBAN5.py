@@ -1,23 +1,18 @@
 from __future__ import absolute_import
 
-import argparse
-import logging
 import os
 import random
-import sys
 import time
 from io import open
 import pandas as pd
 import numpy as np
 import torch
-import gc
 
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, TensorDataset)
-from torch.utils.data.distributed import DistributedSampler
 
 # from tqdm import tqdm, trange
 from pytorch_transformers.modeling_bertLSTM import BertConfig
-from pytorch_transformers.modeling_bertHAN import BertForSequenceClassification
+from oldcode.modeling_CAFE import BertForSequenceClassification
 # from pytorch_transformers.modeling_bertRCNN import BertForSequenceClassification
 # from pytorch_transformers.modeling_bert import BertForSequenceClassification, BertConfig
 from pytorch_transformers import AdamW, WarmupLinearSchedule
@@ -27,7 +22,7 @@ from itertools import cycle
 
 from Config.argsDOUBAN import args
 from Utils.Logger import logger
-from DATAProcess.LoadDataDouBan2 import DATADOUBAN
+from oldcode.LoadDataDouBan2 import DATADOUBAN
 from metric import accuracyCQA,compute_MRR_CQA,compute_5R20,compute_DOUBAN
 os.environ["CUDA_VISIBLE_DEVICES"]='1'
 
@@ -185,6 +180,7 @@ class Trainer:
                     inference_logits = []
                     scores = []
                     questions = [x.text_a for x in eval_examples]
+                    ID = [x.guid for x in eval_examples]
 
                     logger.info("***** Running evaluation *****")
                     logger.info("  Num examples = %d", len(eval_examples))
@@ -228,10 +224,22 @@ class Trainer:
                     eval_mrr = compute_MRR_CQA(scores,gold_labels,questions)
                     eval_5R20 = compute_5R20(scores,gold_labels,questions)
 
+                    eval_DOUBAN_MRR, eval_DOUBAN_mrr, eval_DOUBAN_MAP, eval_Precision1 = compute_DOUBAN(ID, scores,
+                                                                                                        gold_labels)
+                    # print('eval_mrr',eval_mrr)
+                    print(
+                        'eval_F1',eval_accuracy,
+                        'eval_MRR', eval_DOUBAN_MRR,
+                        'eval_MAP', eval_DOUBAN_MAP,
+                        'eval_Precision1', eval_Precision1,
+                        'global_step',global_step,
+                        'loss',train_loss
+                    )
                     result = {'eval_loss': eval_loss,
                               'eval_F1': eval_accuracy,
-                              'eval_MRR':eval_mrr,
-                              'eval_5R20':eval_5R20,
+                              'eval_MRR': eval_DOUBAN_MRR,
+                              'eval_MAP':eval_DOUBAN_MAP,
+                              'eval_Precision1':eval_Precision1,
                               'global_step': global_step,
                               'loss': train_loss}
 
@@ -395,7 +403,7 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         data_dir = '/home/lsy2018/TextClassification/DATA/DATA_DOUBAN/data_1024/',
-        output_dir = './model_BertHAN_DOUBAN',
+        output_dir = './model_BertCAFE_DOUBAN',
         # DOUBAN 是二分类
         num_labels= 2,
         args = args)

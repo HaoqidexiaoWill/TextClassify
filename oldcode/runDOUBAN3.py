@@ -12,7 +12,7 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Tens
 
 # from tqdm import tqdm, trange
 from pytorch_transformers.modeling_bertLSTM import BertConfig
-from oldcode.modeling_RE2 import BertForSequenceClassification
+from pytorch_transformers.modeling_bertHAN import BertForSequenceClassification
 # from pytorch_transformers.modeling_bertRCNN import BertForSequenceClassification
 # from pytorch_transformers.modeling_bert import BertForSequenceClassification, BertConfig
 from pytorch_transformers import AdamW, WarmupLinearSchedule
@@ -390,11 +390,11 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         data_dir = '/home/lsy2018/TextClassification/DATA/DATA_DOUBAN/data_1024/',
-        output_dir = './model_BertRE3_DOUBAN',
+        output_dir = './model_BertHAN_DOUBAN',
         # DOUBAN 是二分类
         num_labels= 2,
         args = args)
-    # trainer.train()
+    trainer.train()
     time_start = time.time()
     trainer.test_eval()
     print('1000条测试运行时间',time.time()-time_start,'s')

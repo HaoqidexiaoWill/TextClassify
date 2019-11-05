@@ -12,8 +12,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from pytorch_transformers.modeling_bertLSTM import BertPreTrainedModel,BertModel
 
-from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
-                             prune_linear_layer, add_start_docstrings)
+from pytorch_transformers.modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
+                                                 prune_linear_layer, add_start_docstrings)
 
 # class Conv1d(nn.Module):
 #     def __init__(self, in_channels, out_channels, filter_sizes):

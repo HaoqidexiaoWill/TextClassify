@@ -12,8 +12,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from pytorch_transformers.modeling_bertLSTM import BertPreTrainedModel,BertModel
 
-from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
-                             prune_linear_layer, add_start_docstrings)
+from pytorch_transformers.modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
+                                                 prune_linear_layer, add_start_docstrings)
 
 class ResnetBlock(nn.Module):
     def __init__(self, channel_size):
