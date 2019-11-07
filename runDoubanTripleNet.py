@@ -11,7 +11,7 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Tens
 
 # from tqdm import tqdm, trange
 from pytorch_transformers.modeling_bertLSTM import BertConfig
-from pytorch_transformers.modeling_Triple import BertForSequenceClassification
+from pytorch_transformers.modeling_Triple4 import BertForSequenceClassification
 # from pytorch_transformers.modeling_bertRCNN import BertForSequenceClassification
 # from pytorch_transformers.modeling_bert import BertForSequenceClassification, BertConfig
 from pytorch_transformers import AdamW, WarmupLinearSchedule
@@ -23,7 +23,7 @@ from Config.argsDOUBAN import args
 from Utils.Logger import logger
 from DATAProcess.LoadDataDouban5 import DATADOUBAN
 from metric import accuracyCQA,compute_MRR_CQA,compute_5R20,compute_DOUBAN
-os.environ["CUDA_VISIBLE_DEVICES"]='1'
+os.environ["CUDA_VISIBLE_DEVICES"]='0'
 class Trainer:
     def __init__(self,data_dir,output_dir,num_labels,args):
 
@@ -133,6 +133,7 @@ class Trainer:
         logger.info("  Num steps = %d", num_train_optimization_steps)
 
         best_acc = 0
+        best_MRR = 0
         tr_loss = 0
         nb_tr_examples, nb_tr_steps = 0, 0
         train_dataloader = cycle(train_dataloader)
@@ -176,14 +177,11 @@ class Trainer:
                     gold_labels = []
                     inference_logits = []
                     scores = []
-                    # questions = [x.text_a for x in eval_examples]
                     ID = [x.guid for x in eval_examples]
 
                     logger.info("***** Running evaluation *****")
                     logger.info("  Num examples = %d", len(eval_examples))
                     logger.info("  Batch size = %d", self.eval_batch_size)
-
-                    # Run prediction for full data
 
                     model.eval()
                     eval_loss, eval_accuracy = 0, 0
@@ -231,9 +229,6 @@ class Trainer:
                     model.train()
                     eval_loss = eval_loss / nb_eval_steps
                     eval_accuracy = accuracyCQA(inference_logits, gold_labels)
-                    # eval_mrr = compute_MRR_CQA(scores,gold_labels,questions)
-                    # eval_5R20 = compute_5R20(scores,gold_labels,questions)
-
                     eval_DOUBAN_MRR, eval_DOUBAN_mrr, eval_DOUBAN_MAP, eval_Precision1 = compute_DOUBAN(ID, scores,
                                                                                                         gold_labels)
                     # print('eval_mrr',eval_mrr)
@@ -260,11 +255,13 @@ class Trainer:
                             writer.write("%s = %s\n" % (key, str(result[key])))
                         writer.write('*' * 80)
                         writer.write('\n')
-                    if eval_accuracy > best_acc :
+                    # if eval_accuracy > best_acc :
+                    if eval_DOUBAN_MRR > best_MRR:
                         print("=" * 80)
-                        print("Best F1", eval_accuracy)
+                        print("Best MRR", eval_DOUBAN_MRR)
                         print("Saving Model......")
-                        best_acc = eval_accuracy
+                        # best_acc = eval_accuracy
+                        best_MRR = eval_DOUBAN_MRR
                         # Save a trained model
                         model_to_save = model.module if hasattr(model,'module') else model
                         output_model_file = os.path.join(self.output_dir, "pytorch_model.bin")
@@ -281,7 +278,6 @@ class Trainer:
         test_examples = data.read_examples(os.path.join(self.data_dir, 'test.csv'))
         print('eval_examples的数量', len(test_examples))
 
-        # questions = [x.text_a for x in test_examples]
         ID = [x.guid for x in test_examples]
 
         test_features = data.convert_examples_to_features(test_examples, self.tokenizer, self.max_seq_length)
@@ -339,11 +335,7 @@ class Trainer:
 
         # 计算评价指标
         assert  len(ID) == scores.shape[0]== scores.shape[0]
-        # eval_accuracy = accuracyCQA(inference_logits, gold_labels)
-        # eval_mrr = compute_MRR_CQA(scores, gold_labels, questions)
-        # eval_5R20 = compute_5R20(scores, gold_labels, questions)
         eval_DOUBAN_MRR,eval_DOUBAN_mrr,eval_DOUBAN_MAP,eval_Precision1 = compute_DOUBAN(ID,scores,gold_labels)
-        # print('eval_mrr',eval_mrr)
         print(
             'eval_MRR',eval_DOUBAN_MRR,eval_DOUBAN_mrr,
             'eval_MAP',eval_DOUBAN_MAP,
@@ -355,11 +347,11 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         data_dir = '/home/lsy2018/TextClassification/DATA/DATA_DOUBAN/data_1102/',
-        output_dir = './model_DOUBAN6',
+        output_dir = './model_DOUBAN_Triple3.5',
         # DOUBAN 是二分类
         num_labels= 2,
         args = args)
-    # trainer.train()
+    trainer.train()
     time_start = time.time()
     trainer.test_eval()
     print('1000条测试运行时间',time.time()-time_start,'s')

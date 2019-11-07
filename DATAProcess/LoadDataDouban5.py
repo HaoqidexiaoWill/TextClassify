@@ -94,7 +94,7 @@ class DATADOUBAN:
 
             history_mask = [0]*(segment_maxlen+2+segment_maxlen+2)+[1]*max_history_length
             utterance_mask = [1]*(segment_maxlen+2)+[0]*(segment_maxlen+2+max_history_length)
-            response_mask = [0]*(segment_maxlen+2)+[1]*(segment_maxlen+2+max_history_length)
+            response_mask = [0]*(segment_maxlen+2)+[1]*(segment_maxlen+2)+[0]*max_history_length
 
             # padding_length = max_seq_length - len(input_ids)
             # input_ids += ([0] * padding_length)
