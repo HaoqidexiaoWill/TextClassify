@@ -11,7 +11,7 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Tens
 
 # from tqdm import tqdm, trange
 from pytorch_transformers.modeling_bertLSTM import BertConfig
-from pytorch_transformers.modeling_Triple4 import BertForSequenceClassification
+from pytorch_transformers.modeling_Triple6 import BertForSequenceClassification
 # from pytorch_transformers.modeling_bertRCNN import BertForSequenceClassification
 # from pytorch_transformers.modeling_bert import BertForSequenceClassification, BertConfig
 from pytorch_transformers import AdamW, WarmupLinearSchedule
@@ -347,7 +347,7 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         data_dir = '/home/lsy2018/TextClassification/DATA/DATA_DOUBAN/data_1102/',
-        output_dir = './model_DOUBAN_Triple3.5',
+        output_dir = './model_DOUBAN_Triple6',
         # DOUBAN 是二分类
         num_labels= 2,
         args = args)
