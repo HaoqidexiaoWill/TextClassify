@@ -53,7 +53,7 @@ class DATADOUBAN:
             ))
         return examples
 
-    def convert_examples_to_features(self,examples, tokenizer, max_seq_length,max_history_length = 64):
+    def convert_examples_to_features(self,examples, tokenizer, max_seq_length,max_history_length = 192):
         features = []
         '''
         对每一个例子进行处理

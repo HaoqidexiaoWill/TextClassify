@@ -5,31 +5,10 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
-from Model.BasicModel import KMaxPooling1D,TripleAttention,ScaledDotProductAttention,TextCNN1D
+from Model.BasicModel import KMaxPooling1D,TripleAttention,ScaledDotProductAttention,TextCNN1D,TextDoubleCNN1D
+from Model.TextCNNIncDeepTriAtt import TextCNNIncDeepTriAtt
 from pytorch_transformers.modeling_bertLSTM import BertPreTrainedModel,BertModel
 
-class ResnetBlock(nn.Module):
-    def __init__(self, channel_size):
-        super(ResnetBlock, self).__init__()
-        self.channel_size = channel_size
-        self.maxpool = nn.Sequential(
-            nn.ConstantPad1d(padding=(0, 1), value=0),
-            nn.MaxPool1d(kernel_size=3, stride=2)
-        )
-        self.conv = nn.Sequential(
-            nn.BatchNorm1d(num_features=self.channel_size),
-            nn.ReLU(),
-            nn.Conv1d(self.channel_size, self.channel_size,kernel_size=3, padding=1),
-            nn.BatchNorm1d(num_features=self.channel_size),
-            nn.ReLU(),
-            nn.Conv1d(self.channel_size, self.channel_size,kernel_size=3, padding=1),
-        )
-
-    def forward(self, x):
-        x_shortcut = self.maxpool(x)
-        x = self.conv(x_shortcut)
-        x = x + x_shortcut
-        return x
 
 class BertForSequenceClassification(BertPreTrainedModel):
     def __init__(self, config):
@@ -40,24 +19,20 @@ class BertForSequenceClassification(BertPreTrainedModel):
         self.batch_size = 32
         self.hidden_size = config.hidden_size
 
-        rnn_hidden_size = 768
-        num_layers = 2
-        dropout = 0.2
-
-        self.rnn = nn.LSTM(config.hidden_size*3, rnn_hidden_size, num_layers, bidirectional=True, batch_first=True,
-                           dropout=dropout)
-
-        self.W2 = nn.Linear(config.hidden_size + 2 * rnn_hidden_size, config.hidden_size)
-        # self.classifier = nn.Linear(rnn_hidden_size * 2, config.num_labels)
+        self.num_layers = 2
 
         n_filters = 200
         filter_sizes = [1,2,3,4,5,6,7,8,9,10]
-        self.classifier = nn.Linear(len(filter_sizes) * n_filters*3+config.hidden_size*3+config.hidden_size*3, config.num_labels)
-        self.convs = TextCNN1D(config.hidden_size, n_filters,filter_sizes)
+        # self.rnn = nn.LSTM(config.hidden_size, config.hidden_size, 2, bidirectional=True, batch_first=True,dropout=0.2)
 
+        self.classifier = nn.Linear(len(filter_sizes) * n_filters*3+config.hidden_size*3+config.hidden_size*3, config.num_labels)
+        # self.convs = TextCNN1D(config.hidden_size, n_filters,filter_sizes)
+        # self.convs = TextDoubleCNN1D(config.hidden_size, n_filters,64)
+        # self.convs_hist = TextCNNIncDeepTriAtt(config.hidden_size,768,192,12)
+        self.convs = TextCNNIncDeepTriAtt(config.hidden_size,512,48,12)
         # 最后的全连接层
         self.fc = nn.Sequential(
-            nn.Linear(len(filter_sizes) * n_filters*3*2,config.hidden_size),
+            nn.Linear(512*8*3,config.hidden_size),
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
             nn.Linear(config.hidden_size,self.num_labels)
@@ -71,9 +46,6 @@ class BertForSequenceClassification(BertPreTrainedModel):
             nn.Dropout(0.1)
         )
         self.triple_attention = TripleAttention(hidden_size=self.hidden_size)
-
-        self.kmax_pooling = KMaxPooling1D(k = 5)
-
         self.self_attention = ScaledDotProductAttention()
         self.apply(self.init_weights)
 
@@ -109,38 +81,47 @@ class BertForSequenceClassification(BertPreTrainedModel):
             response = response_mask_output
         )
 
-        # print(context_hist.size())
+        # history_conved,history_incepted =  self.convs(context_hist.permute(0, 2, 1))
+        # utterance_conved,utterance_incepted = self.convs(context_resp.permute(0, 2, 1))
+        # response_conved,response_incepted = self.convs(context_utt.permute(0, 2, 1))
+        # _,history_conved =  self.convs(context_hist.permute(0, 2, 1))
+        # _,utterance_conved = self.convs(context_resp.permute(0, 2, 1))
+        # _,response_conved= self.convs(context_utt.permute(0, 2, 1))
+        # context_hist, _= self.rnn(context_hist)
+        # context_utt, _= self.rnn(context_utt)
+        # context_resp, _= self.rnn(context_resp)
+
+        history_conved,utterance_conved,response_conved = self.convs(context_hist,context_utt,context_resp)
+        # utterance_conved = self.convs_utt(context_utt)
+        # response_conved = self.convs_utt(context_resp)
+
+        # history_conved = nn.functional.max_pool1d(history_conved, history_conved.size()[2]).squeeze(2)
+        # utterance_conved = nn.functional.max_pool1d(utterance_conved, utterance_conved.size()[2]).squeeze(2)
+        # response_conved = nn.functional.max_pool1d(response_conved, response_conved.size()[2]).squeeze(2)
+
+        # history_max_pooling = [nn.functional.max_pool1d(conv, conv.shape[2]).squeeze(2)for conv in history_conved]
+        # utterance_max_pooling = [nn.functional.max_pool1d(conv, conv.shape[2]).squeeze(2)for conv in utterance_conved]
+        # response_max_pooling = [nn.functional.max_pool1d(conv, conv.shape[2]).squeeze(2)for conv in response_conved]
+        # history_mean_pooling = [nn.functional.avg_pool1d(conv, conv.shape[2]).squeeze(2)for conv in history_conved]
+        # utterance_mean_pooling = [nn.functional.avg_pool1d(conv, conv.shape[2]).squeeze(2)for conv in utterance_conved]
+        # response_mean_pooling = [nn.functional.avg_pool1d(conv, conv.shape[2]).squeeze(2)for conv in response_conved]
+        #
+        #
+        # history_cat_maxpooling = self.dropout(torch.cat(history_max_pooling, dim=1))
+        # utterance_cat_maxpooling = self.dropout(torch.cat(utterance_max_pooling, dim=1))
+        # response_cat_maxpooling = self.dropout(torch.cat(response_max_pooling, dim=1))
+        # history_cat_meanpooling = self.dropout(torch.cat(history_mean_pooling, dim=1))
+        # utterance_cat_meanpooling = self.dropout(torch.cat(utterance_mean_pooling, dim=1))
+        # response_cat_meanpooling = self.dropout(torch.cat(response_mean_pooling, dim=1))
+        # print(history_cat_maxpooling.size())
         # exit()
-        history_conved =  self.convs(context_hist.permute(0, 2, 1))
-        utterance_conved = self.convs(context_resp.permute(0, 2, 1))
-        response_conved = self.convs(context_utt.permute(0, 2, 1))
-
-
-
-        history_max_pooling = [nn.functional.max_pool1d(conv, conv.shape[2]).squeeze(2)for conv in history_conved]
-        utterance_max_pooling = [nn.functional.max_pool1d(conv, conv.shape[2]).squeeze(2)for conv in utterance_conved]
-        response_max_pooling = [nn.functional.max_pool1d(conv, conv.shape[2]).squeeze(2)for conv in response_conved]
-        history_mean_pooling = [nn.functional.avg_pool1d(conv, conv.shape[2]).squeeze(2)for conv in history_conved]
-        utterance_mean_pooling = [nn.functional.avg_pool1d(conv, conv.shape[2]).squeeze(2)for conv in utterance_conved]
-        response_mean_pooling = [nn.functional.avg_pool1d(conv, conv.shape[2]).squeeze(2)for conv in response_conved]
-
-
-        history_cat_maxpooling = self.dropout(torch.cat(history_max_pooling, dim=1))
-        utterance_cat_maxpooling = self.dropout(torch.cat(utterance_max_pooling, dim=1))
-        response_cat_maxpooling = self.dropout(torch.cat(response_max_pooling, dim=1))
-        history_cat_meanpooling = self.dropout(torch.cat(history_mean_pooling, dim=1))
-        utterance_cat_meanpooling = self.dropout(torch.cat(utterance_mean_pooling, dim=1))
-        response_cat_meanpooling = self.dropout(torch.cat(response_mean_pooling, dim=1))
 
 
 
         logits  = self.fc(torch.cat([
-            history_cat_maxpooling,
-            utterance_cat_maxpooling,
-            response_cat_maxpooling,
-            history_cat_meanpooling,
-            utterance_cat_meanpooling,
-            response_cat_meanpooling],dim = -1))
+            history_conved,
+            utterance_conved,
+            response_conved],dim = -1))
 
 
         if labels is not None:

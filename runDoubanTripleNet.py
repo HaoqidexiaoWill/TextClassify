@@ -11,7 +11,7 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Tens
 
 # from tqdm import tqdm, trange
 from pytorch_transformers.modeling_bertLSTM import BertConfig
-from pytorch_transformers.modeling_Triple6 import BertForSequenceClassification
+from pytorch_transformers.modeling_Triple13 import BertForSequenceClassification
 # from pytorch_transformers.modeling_bertRCNN import BertForSequenceClassification
 # from pytorch_transformers.modeling_bert import BertForSequenceClassification, BertConfig
 from pytorch_transformers import AdamW, WarmupLinearSchedule
@@ -23,7 +23,7 @@ from Config.argsDOUBAN import args
 from Utils.Logger import logger
 from DATAProcess.LoadDataDouban5 import DATADOUBAN
 from metric import accuracyCQA,compute_MRR_CQA,compute_5R20,compute_DOUBAN
-os.environ["CUDA_VISIBLE_DEVICES"]='0'
+os.environ["CUDA_VISIBLE_DEVICES"]='1'
 class Trainer:
     def __init__(self,data_dir,output_dir,num_labels,args):
 
@@ -159,9 +159,9 @@ class Trainer:
             loss.backward()
             if (nb_tr_steps + 1) % self.gradient_accumulation_steps == 0:
 
-                scheduler.step()
                 optimizer.step()
                 optimizer.zero_grad()
+                scheduler.step()
                 global_step += 1
 
             if (step + 1) % (self.eval_steps * self.gradient_accumulation_steps) == 0:
@@ -347,7 +347,7 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         data_dir = '/home/lsy2018/TextClassification/DATA/DATA_DOUBAN/data_1102/',
-        output_dir = './model_DOUBAN_Triple6',
+        output_dir = './model_DOUBAN_Triple13',
         # DOUBAN 是二分类
         num_labels= 2,
         args = args)
