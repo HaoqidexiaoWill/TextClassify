@@ -9,20 +9,16 @@ import torch
 
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, TensorDataset)
 
-# from tqdm import tqdm, trange
-from pytorch_transformers.modeling_bertLSTM import BertConfig
-from pytorch_transformers.modeling_Triple13 import BertForSequenceClassification
-# from pytorch_transformers.modeling_bertRCNN import BertForSequenceClassification
-# from pytorch_transformers.modeling_bert import BertForSequenceClassification, BertConfig
+from pytorch_transformers.modeling_bert import BertConfig,BertForSequenceClassification
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 from pytorch_transformers.tokenization_bert import BertTokenizer
 
 from itertools import cycle
 
-from Config.argsDOUBAN import args
+from Config.argsMultiWOZ import args
 from Utils.Logger import logger
-from DATAProcess.LoadDataDouban5 import DATADOUBAN
-from metric import accuracyCQA,compute_MRR_CQA,compute_5R20,compute_DOUBAN
+from DATAProcess.LoadDATAMultiWOZ import DATAMultiWOZ
+from Metric.ComputeMultiWOZ import accuracyF1
 os.environ["CUDA_VISIBLE_DEVICES"]='0'
 class Trainer:
     def __init__(self,data_dir,output_dir,num_labels,args):
@@ -44,7 +40,7 @@ class Trainer:
         self.train_batch_size = args.per_gpu_train_batch_size
         self.eval_batch_size = self.per_gpu_eval_batch_size
         self.do_lower_case = args.do_lower_case
-        self.model_name_or_path = args.model_name_or_path
+        self.model_name_or_path = '/home/lsy2018/TextClassification/PreTraining/uncased_L-12_H-768_A-12/'
         self.max_seq_length = args.max_seq_length
         self.seed = args.seed
         self.seed_everything()
@@ -63,34 +59,28 @@ class Trainer:
         torch.cuda.manual_seed(self.seed)
         torch.backends.cudnn.deterministic = True
     def create_dataloader(self):
-        data = DATADOUBAN(
+        data = DATAMultiWOZ(
             debug = False,
             data_dir= self.data_dir,
         )
-        train_examples = data.read_examples(os.path.join(self.data_dir,'train.csv'))
+        train_examples = data.read_examples(os.path.join(self.data_dir,'train.tsv'))
         train_features = data.convert_examples_to_features(train_examples, self.tokenizer, self.max_seq_length)
         all_input_ids = torch.tensor(data.select_field(train_features, 'input_ids'), dtype=torch.long)
         all_input_mask = torch.tensor(data.select_field(train_features, 'input_mask'), dtype=torch.long)
         all_segment_ids = torch.tensor(data.select_field(train_features, 'segment_ids'), dtype=torch.long)
-        all_utterance_mask = torch.tensor(data.select_field(train_features, 'utterance_mask'), dtype=torch.long)
-        all_response_mask = torch.tensor(data.select_field(train_features, 'response_mask'), dtype=torch.long)
-        all_history_mask = torch.tensor(data.select_field(train_features, 'history_mask'), dtype=torch.long)
         all_label = torch.tensor([f.label for f in train_features], dtype=torch.long)
-        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,all_utterance_mask,all_response_mask,all_history_mask, all_label)
+        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label)
 
         train_sampler = RandomSampler(train_data)
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=self.train_batch_size)
 
-        eval_examples = data.read_examples(os.path.join(self.data_dir, 'test.csv'))
+        eval_examples = data.read_examples(os.path.join(self.data_dir, 'test.tsv'))
         eval_features = data.convert_examples_to_features(eval_examples, self.tokenizer, self.max_seq_length)
         all_input_ids = torch.tensor(data.select_field(eval_features, 'input_ids'), dtype=torch.long)
         all_input_mask = torch.tensor(data.select_field(eval_features, 'input_mask'), dtype=torch.long)
         all_segment_ids = torch.tensor(data.select_field(eval_features, 'segment_ids'), dtype=torch.long)
-        all_utterance_mask = torch.tensor(data.select_field(eval_features, 'utterance_mask'), dtype=torch.long)
-        all_response_mask = torch.tensor(data.select_field(eval_features, 'response_mask'), dtype=torch.long)
-        all_history_mask = torch.tensor(data.select_field(eval_features, 'history_mask'), dtype=torch.long)
         all_label = torch.tensor([f.label for f in eval_features], dtype=torch.long)
-        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,all_utterance_mask,all_response_mask,all_history_mask, all_label)
+        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label)
         eval_sampler = SequentialSampler(eval_data)
         eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=self.eval_batch_size)
 
@@ -108,7 +98,7 @@ class Trainer:
 
         # Prepare model
         config = BertConfig.from_pretrained(self.model_name_or_path, num_labels=self.num_labels)
-        model = BertForSequenceClassification.from_pretrained(self.model_name_or_path, self.args, config=config)
+        model = BertForSequenceClassification.from_pretrained(self.model_name_or_path,self.args, config=config)
         model.to(self.device)
         model.train()
         # Prepare optimizer
@@ -141,14 +131,11 @@ class Trainer:
         for step in range(num_train_optimization_steps):
             batch = next(train_dataloader)
             batch = tuple(t.to(self.device) for t in batch)
-            input_ids, input_mask, segment_ids,utterance_mask,response_mask,history_mask, label_ids = batch
+            input_ids, input_mask, segment_ids, label_ids = batch
             loss = model(
                 input_ids=input_ids,
                 token_type_ids=segment_ids,
                 attention_mask=input_mask,
-                utterance_mask = utterance_mask,
-                response_mask = response_mask,
-                history_mask =history_mask,
                 labels=label_ids)
             tr_loss += loss.item()
             train_loss = round(tr_loss / (nb_tr_steps + 1), 4)
@@ -186,13 +173,10 @@ class Trainer:
                     model.eval()
                     eval_loss, eval_accuracy = 0, 0
                     nb_eval_steps, nb_eval_examples = 0, 0
-                    for input_ids, input_mask, segment_ids,utterance_mask,response_mask,history_mask,label_ids in eval_dataloader:
+                    for input_ids, input_mask, segment_ids,label_ids in eval_dataloader:
                         input_ids = input_ids.to(self.device)
                         input_mask = input_mask.to(self.device)
                         segment_ids = segment_ids.to(self.device)
-                        utterance_mask = utterance_mask.to(self.device)
-                        response_mask = response_mask.to(self.device)
-                        history_mask = history_mask.to(self.device)
                         label_ids = label_ids.to(self.device)
 
                         with torch.no_grad():
@@ -200,17 +184,11 @@ class Trainer:
                                 input_ids=input_ids,
                                 token_type_ids=segment_ids,
                                 attention_mask=input_mask,
-                                utterance_mask = utterance_mask,
-                                response_mask = response_mask,
-                                history_mask = history_mask,
                                 labels=label_ids)
                             logits = model(
                                 input_ids=input_ids,
                                 token_type_ids=segment_ids,
-                                attention_mask=input_mask,
-                                utterance_mask=utterance_mask,
-                                response_mask=response_mask,
-                                history_mask=history_mask,
+                                attention_mask=input_mask
                             )
 
                         logits = logits.detach().cpu().numpy()
@@ -228,23 +206,14 @@ class Trainer:
                     scores = np.concatenate(scores, 0)
                     model.train()
                     eval_loss = eval_loss / nb_eval_steps
-                    eval_accuracy = accuracyCQA(inference_logits, gold_labels)
-                    eval_DOUBAN_MRR, eval_DOUBAN_mrr, eval_DOUBAN_MAP, eval_Precision1 = compute_DOUBAN(ID, scores,
-                                                                                                        gold_labels)
-                    # print('eval_mrr',eval_mrr)
+                    eval_accuracy = accuracyF1(inference_logits, gold_labels)
                     print(
                         'eval_F1',eval_accuracy,
-                        'eval_MRR', eval_DOUBAN_MRR,
-                        'eval_MAP', eval_DOUBAN_MAP,
-                        'eval_Precision1', eval_Precision1,
                         'global_step',global_step,
                         'loss',train_loss
                     )
                     result = {'eval_loss': eval_loss,
                               'eval_F1': eval_accuracy,
-                              'eval_MRR': eval_DOUBAN_MRR,
-                              'eval_MAP':eval_DOUBAN_MAP,
-                              'eval_Precision1':eval_Precision1,
                               'global_step': global_step,
                               'loss': train_loss}
 
@@ -255,13 +224,12 @@ class Trainer:
                             writer.write("%s = %s\n" % (key, str(result[key])))
                         writer.write('*' * 80)
                         writer.write('\n')
-                    # if eval_accuracy > best_acc :
-                    if eval_DOUBAN_MRR > best_MRR:
+                    if eval_accuracy > best_acc :
                         print("=" * 80)
-                        print("Best MRR", eval_DOUBAN_MRR)
+                        print("Best F1", eval_accuracy)
                         print("Saving Model......")
                         # best_acc = eval_accuracy
-                        best_MRR = eval_DOUBAN_MRR
+                        best_acc = eval_accuracy
                         # Save a trained model
                         model_to_save = model.module if hasattr(model,'module') else model
                         output_model_file = os.path.join(self.output_dir, "pytorch_model.bin")
@@ -271,11 +239,11 @@ class Trainer:
                         print("=" * 80)
 
     def test_eval(self):
-        data = DATADOUBAN(
+        data = DATAMultiWOZ(
             debug=False,
             data_dir=self.data_dir
         )
-        test_examples = data.read_examples(os.path.join(self.data_dir, 'test.csv'))
+        test_examples = data.read_examples(os.path.join(self.data_dir, 'test.tsv'))
         print('eval_examples的数量', len(test_examples))
 
         ID = [x.guid for x in test_examples]
@@ -307,13 +275,10 @@ class Trainer:
         gold_labels = []
         scores = []
 
-        for input_ids, input_mask, segment_ids, utterance_mask, response_mask, history_mask, label_ids in test_dataloader:
+        for input_ids, input_mask, segment_ids, label_ids in test_dataloader:
             input_ids = input_ids.to(self.device)
             input_mask = input_mask.to(self.device)
             segment_ids = segment_ids.to(self.device)
-            utterance_mask = utterance_mask.to(self.device)
-            response_mask = response_mask.to(self.device)
-            history_mask = history_mask.to(self.device)
             label_ids = label_ids.to(self.device)
 
             with torch.no_grad():
@@ -321,9 +286,6 @@ class Trainer:
                     input_ids=input_ids,
                     token_type_ids=segment_ids,
                     attention_mask=input_mask,
-                    utterance_mask=utterance_mask,
-                    response_mask=response_mask,
-                    history_mask=history_mask,
                 ).detach().cpu().numpy()
             label_ids = label_ids.to('cpu').numpy()
             scores.append(logits)
@@ -335,23 +297,25 @@ class Trainer:
 
         # 计算评价指标
         assert  len(ID) == scores.shape[0]== scores.shape[0]
-        eval_DOUBAN_MRR,eval_DOUBAN_mrr,eval_DOUBAN_MAP,eval_Precision1 = compute_DOUBAN(ID,scores,gold_labels)
-        print(
-            'eval_MRR',eval_DOUBAN_MRR,eval_DOUBAN_mrr,
-            'eval_MAP',eval_DOUBAN_MAP,
-            'eval_Precision1',eval_Precision1)
+        eval_accuracy = accuracyF1(logits, gold_labels)
 
+        # eval_DOUBAN_MRR,eval_DOUBAN_mrr,eval_DOUBAN_MAP,eval_Precision1 = compute_DOUBAN(ID,scores,gold_labels)
+        # print(
+        #     'eval_MRR',eval_DOUBAN_MRR,eval_DOUBAN_mrr,
+        #     'eval_MAP',eval_DOUBAN_MAP,
+        #     'eval_Precision1',eval_Precision1)
+        print('F1',eval_accuracy)
 
 
 if __name__ == "__main__":
 
     trainer = Trainer(
-        data_dir = '/home/lsy2018/TextClassification/DATA/DATA_DOUBAN/data_1102/',
-        output_dir = './model_DOUBAN_Triple13',
+        data_dir = '/home/lsy2018/graphDialog/data/data/',
+        output_dir = './model_MultiWOZ_1',
         # DOUBAN 是二分类
         num_labels= 2,
         args = args)
     trainer.train()
     time_start = time.time()
-    trainer.test_eval()
+    # trainer.test_eval()
     print('1000条测试运行时间',time.time()-time_start,'s')

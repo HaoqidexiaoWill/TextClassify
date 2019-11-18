@@ -40,7 +40,7 @@ class DATADOUBAN:
         self.data_dir = data_dir
 
     def read_examples(self,input_file):
-        df = pd.read_csv(input_file, sep=',',names = ['dialogid','history', 'utterance', 'response', 'label'])
+        df = pd.read_csv(input_file, sep=',',names = ['dialogid','history', 'utterance', 'response', 'label'],nrows = 1000)
         print('行数',df.shape[0])
         examples = []
         for index, row in df.iterrows():
