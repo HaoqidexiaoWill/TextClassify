@@ -13,3 +13,5 @@
 |3输入BERT+TripleAtt+CNN+cat|0.6326 |0.5837| 0.4639|
 |3输入BERT+TripleAtt+RNN+CNN+cat|0.6357|0.5862|0.4684|
 |3输入BERT+TripleAtt+联合Att+meanmaxPooling|0.6348|0.5854|0.4639|
+|3输入BERT+TripleAtt+Transformer+meanmaxPooling|0.6410| 0.5941|0.4714|
+3输入BERT+TripleAtt+CNN+meanmaxPooling|0.6448|-|-|
