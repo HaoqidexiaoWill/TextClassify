@@ -7,16 +7,17 @@ from Utils.Logger import logger
 # from collections import defaultdict
 class InputExample(object):
 
-    def __init__(self,guid,text_eachturn=None,text_history=None,turn_belief=None,label_domain=None,label_dependcy=None):
+    def __init__(self,guid,text_eachturn=None,text_history=None,turn_belief=None,label_domainslot=None,label_domain=None,label_dependcy=None):
         self.guid = guid
         self.text_eachturn = text_eachturn
         self.text_history = text_history
         self.turn_belief = turn_belief
+        self.label_domainslot = label_domainslot
         self.label_domain = label_domain
         self.label_dependcy = label_dependcy
 
 class InputFeatures(object):
-    def __init__(self,example_id,choices_features,labels_domain,labels_dependcy):
+    def __init__(self,example_id,choices_features,labels_domainslot,labels_domain,labels_dependcy):
         self.example_id = example_id
         self.choices_features = [
             {
@@ -29,6 +30,7 @@ class InputFeatures(object):
                 input_mask_utt,
                 segment_ids_utt in choices_features
         ]
+        self.labels_domainslot = labels_domainslot
         self.labels_domain = labels_domain
         self.labels_dependcy = labels_dependcy
 class DATAMultiWOZ:
@@ -53,6 +55,7 @@ class DATAMultiWOZ:
                     text_eachturn=row['eachturn'],
                     text_history = row['history'],
                     turn_belief = row['turn_belief'],
+                    label_domainslot = row['label_domainslot'],
                     label_domain = row['label_domain'],
                     label_dependcy = row['label_dependcy']
                 ))
@@ -67,18 +70,18 @@ class DATAMultiWOZ:
         for example_index, example in enumerate(examples):
 
             # eachturn_tokens = tokenizer.tokenize(example.text_eachturn)
-            eachturn_tokens = example.text_eachturn.split(' ')
+            eachturn_tokens = example.text_history.split(' ')
+            eachturn_labels_domainslot = example.label_domainslot
             eachturn_labels_domain = example.label_domain
             eachturn_labels_dependcy = example.label_dependcy
 
             choices_features = []
+            total_length = len(eachturn_tokens)
+            if total_length > max_seq_length-2:
+                eachturn_tokens = eachturn_tokens[:-max_seq_length]
+                eachturn_labels_domain = eachturn_labels_domain[:-max_seq_length]
+                eachturn_labels_dependcy = eachturn_labels_dependcy[:-max_seq_length]
 
-
-            self._truncate_seq_pair(
-                eachturn_tokens,
-                eachturn_labels_domain,
-                eachturn_labels_dependcy,
-                max_seq_length//2-2)
             tokens = ["[CLS]"] + eachturn_tokens + ["[SEP]"]
             # print(type(eachturn_labels_domain))
             # print(eachturn_labels_domain)
@@ -101,6 +104,7 @@ class DATAMultiWOZ:
 
             assert len(input_ids) == len(input_mask) == len(segment_ids)
             assert len(input_ids) == len(labels_domain) == len(labels_dependcy)
+
             choices_features.append((tokens, input_ids, input_mask, segment_ids))
             if example_index < 3:
                 logger.info("*** Example ***")
@@ -108,28 +112,24 @@ class DATAMultiWOZ:
                 logger.info("guid: {}".format(example.guid))
                 logger.info("tokens: {}".format(' '.join(tokens).replace('\u2581', '_')))
                 logger.info(('turn_belief:{}'.format(example.turn_belief)))
+                logger.info("labels_domainslot: {}".format(example.label_domainslot))
                 logger.info("labels_domain: {}".format(labels_domain))
                 logger.info("labels_dependcy: {}".format(labels_dependcy))
             features.append(
                 InputFeatures(
                     example_id=example.guid,
                     choices_features=choices_features,
+                    labels_domainslot = example.label_domainslot,
                     labels_dependcy=labels_dependcy,
                     labels_domain=labels_domain
                 )
             )
         return features
 
-    def _truncate_seq_pair(self,utterance_tokens,eachturn_labels_domain,eachturn_labels_dependcy, max_length):
 
-        while True:
-            total_length = len(utterance_tokens)
-            if total_length <= max_length:
-                break
-            if len(utterance_tokens) > len(utterance_tokens):
-                eachturn_labels_dependcy.pop()
-                eachturn_labels_domain.pop()
-                utterance_tokens.pop()
+
+
+
 
     def select_field(self,features, field):
         return [

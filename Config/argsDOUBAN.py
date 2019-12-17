@@ -14,7 +14,7 @@ parser.add_argument("--tokenizer_name", default="", type=str,
                     help="Pretrained tokenizer name or path if not the same as model_name")
 parser.add_argument("--cache_dir", default="", type=str,
                     help="Where do you want to store the pre-trained models downloaded from s3")
-parser.add_argument("--max_seq_length", default=96, type=int,
+parser.add_argument("--max_seq_length", default=32, type=int,
                     help="The maximum total input sequence length after tokenization. Sequences longer "
                          "than this will be truncated, sequences shorter will be padded.")
 parser.add_argument("--do_train", action='store_true',

@@ -19,10 +19,10 @@ from pytorch_transformers.tokenization_bert import BertTokenizer
 
 from itertools import cycle
 
-from Config.argsDOUBAN import args
+from Config.argsUbuntu import args
 from Utils.Logger import logger
-from DATAProcess.LoadDataDouban6 import DATADOUBAN
-from metric import accuracyCQA,compute_MRR_CQA,compute_5R20,compute_DOUBAN
+from DATAProcess.LoadDataUbuntuV1 import DATAUBUNTU
+from metric import accuracyCQA,compute_MRR_CQA,compute_5R20,compute_DOUBAN,r_at_k
 os.environ["CUDA_VISIBLE_DEVICES"]='1'
 class Trainer:
     def __init__(self,data_dir,output_dir,num_labels,args):
@@ -63,7 +63,7 @@ class Trainer:
         torch.cuda.manual_seed(self.seed)
         torch.backends.cudnn.deterministic = True
     def create_dataloader(self):
-        data = DATADOUBAN(
+        data = DATAUBUNTU(
             debug = False,
             data_dir= self.data_dir,
         )
@@ -231,12 +231,18 @@ class Trainer:
                     eval_accuracy = accuracyCQA(inference_logits, gold_labels)
                     eval_DOUBAN_MRR, eval_DOUBAN_mrr, eval_DOUBAN_MAP, eval_Precision1 = compute_DOUBAN(ID, scores,
                                                                                                         gold_labels)
+                    r_at_1 = r_at_k(ID,scores,gold_labels,1)
+                    r_at_2 = r_at_k(ID,scores,gold_labels,2)
+                    r_at_5 = r_at_k(ID,scores,gold_labels,5)
                     # print('eval_mrr',eval_mrr)
                     print(
                         'eval_F1',eval_accuracy,
                         'eval_MRR', eval_DOUBAN_MRR,
                         'eval_MAP', eval_DOUBAN_MAP,
                         'eval_Precision1', eval_Precision1,
+                        'r10@1', r_at_1,
+                        'r10@2', r_at_2,
+                        'r10@5', r_at_5,
                         'global_step',global_step,
                         'loss',train_loss
                     )
@@ -245,6 +251,9 @@ class Trainer:
                               'eval_MRR': eval_DOUBAN_MRR,
                               'eval_MAP':eval_DOUBAN_MAP,
                               'eval_Precision1':eval_Precision1,
+                              'r10@1':r_at_1,
+                              'r10@2':r_at_2,
+                              'r10@5':r_at_5,
                               'global_step': global_step,
                               'loss': train_loss}
 
@@ -271,7 +280,7 @@ class Trainer:
                         print("=" * 80)
 
     def test_eval(self):
-        data = DATADOUBAN(
+        data = DATAUBUNTU(
             debug=False,
             data_dir=self.data_dir
         )
@@ -336,18 +345,24 @@ class Trainer:
         # 计算评价指标
         assert  len(ID) == scores.shape[0]== scores.shape[0]
         eval_DOUBAN_MRR,eval_DOUBAN_mrr,eval_DOUBAN_MAP,eval_Precision1 = compute_DOUBAN(ID,scores,gold_labels)
+        r_at_1 = r_at_k(ID,scores,gold_labels,1)
+        r_at_2 = r_at_k(ID,scores,gold_labels,2)
+        r_at_5 = r_at_k(ID,scores,gold_labels,5)
         print(
             'eval_MRR',eval_DOUBAN_MRR,eval_DOUBAN_mrr,
             'eval_MAP',eval_DOUBAN_MAP,
-            'eval_Precision1',eval_Precision1)
+            'eval_Precision1',eval_Precision1,
+            'r10@1', r_at_1,
+            'r10@2', r_at_2,
+            'r10@5', r_at_5,)
 
 
 
 if __name__ == "__main__":
 
     trainer = Trainer(
-        data_dir = '/home/lsy2018/TextClassification/DATA/DATA_DOUBAN/data_1102/',
-        output_dir = './model_DOUBAN_Triple13',
+        data_dir = '/home/lsy2018/TextClassification/DATA/Ubuntu_Corpus_V1/processed/',
+        output_dir = './model_UBUNTU_Triple',
         # DOUBAN 是二分类
         num_labels= 2,
         args = args)

@@ -46,8 +46,8 @@ class DATAMultiWOZ:
         with open(input_file, encoding='utf-8') as inf:
             for idx, line_ in enumerate(inf):
                 row = json.loads(line_.strip())
-                if idx >= 1000:
-                    break
+                # if idx >= 1000:
+                #     break
                 examples.append(InputExample(
                     guid=row['DialogTurn_id'],
                     text_eachturn=row['eachturn'],

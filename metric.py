@@ -137,7 +137,7 @@ def compute_DOUBAN(ID,scores,labels):
     return MRR/num_query,mrr,MAP/num_query,Precision_1/num_query
 
 
-def Douban_r_at_k(ID,scores,labels,k):
+def r_at_k(ID,scores,labels,k):
     """count if true answer is in topk"""
     # pred_labels = torch.topk(scores, 2, largest=True, sorted=True)[1].data.squeeze()[:,1]
     # print(pred_labels)

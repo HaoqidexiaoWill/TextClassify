@@ -9,27 +9,25 @@ import torch
 
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, TensorDataset)
 
-# from tqdm import tqdm, trange
-from pytorch_transformers.modeling_bertLSTM import BertConfig
-from pytorch_transformers.modeling_Triple13 import BertForSequenceClassification
-# from pytorch_transformers.modeling_bertRCNN import BertForSequenceClassification
-# from pytorch_transformers.modeling_bert import BertForSequenceClassification, BertConfig
+from pytorch_transformers.modeling_bertSeqTaging2 import BertForTokenClassification
+from pytorch_transformers.modeling_bert import BertConfig
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 from pytorch_transformers.tokenization_bert import BertTokenizer
 
 from itertools import cycle
 
-from Config.argsDOUBAN import args
+from Config.argsMultiWOZ import args
 from Utils.Logger import logger
-from DATAProcess.LoadDataDouban6 import DATADOUBAN
-from metric import accuracyCQA,compute_MRR_CQA,compute_5R20,compute_DOUBAN
+from DATAProcess.LoadDATAMultiWOZ import DATAMultiWOZ
+from Metric.ComputeMultiWOZ import accuracyF1,compute_jointgoal
 os.environ["CUDA_VISIBLE_DEVICES"]='1'
 class Trainer:
-    def __init__(self,data_dir,output_dir,num_labels,args):
+    def __init__(self,data_dir,output_dir,num_labels_domain,num_labels_dependcy,args):
 
         self.data_dir = data_dir
         self.output_dir = output_dir
-        self.num_labels = num_labels
+        self.num_labels_domain = num_labels_domain
+        self.num_labels_dependcy = num_labels_dependcy
 
 
         self.weight_decay = args.weight_decay
@@ -44,7 +42,7 @@ class Trainer:
         self.train_batch_size = args.per_gpu_train_batch_size
         self.eval_batch_size = self.per_gpu_eval_batch_size
         self.do_lower_case = args.do_lower_case
-        self.model_name_or_path = args.model_name_or_path
+        self.model_name_or_path = '/home/lsy2018/TextClassification/PreTraining/uncased_L-12_H-768_A-12/'
         self.max_seq_length = args.max_seq_length
         self.seed = args.seed
         self.seed_everything()
@@ -63,34 +61,33 @@ class Trainer:
         torch.cuda.manual_seed(self.seed)
         torch.backends.cudnn.deterministic = True
     def create_dataloader(self):
-        data = DATADOUBAN(
+        data = DATAMultiWOZ(
             debug = False,
             data_dir= self.data_dir,
         )
-        train_examples = data.read_examples(os.path.join(self.data_dir,'train.csv'))
+        train_examples = data.read_examples(os.path.join(self.data_dir,'train.json'))
         train_features = data.convert_examples_to_features(train_examples, self.tokenizer, self.max_seq_length)
         all_input_ids = torch.tensor(data.select_field(train_features, 'input_ids'), dtype=torch.long)
         all_input_mask = torch.tensor(data.select_field(train_features, 'input_mask'), dtype=torch.long)
         all_segment_ids = torch.tensor(data.select_field(train_features, 'segment_ids'), dtype=torch.long)
-        all_utterance_mask = torch.tensor(data.select_field(train_features, 'utterance_mask'), dtype=torch.long)
-        all_response_mask = torch.tensor(data.select_field(train_features, 'response_mask'), dtype=torch.long)
-        all_history_mask = torch.tensor(data.select_field(train_features, 'history_mask'), dtype=torch.long)
-        all_label = torch.tensor([f.label for f in train_features], dtype=torch.long)
-        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,all_utterance_mask,all_response_mask,all_history_mask, all_label)
+        all_labels_domain = torch.tensor([f.labels_domain for f in train_features], dtype=torch.long)
+        all_labels_dependcy = torch.tensor([f.labels_dependcy for f in train_features], dtype=torch.long)
+
+        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_labels_domain,all_labels_dependcy)
 
         train_sampler = RandomSampler(train_data)
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=self.train_batch_size)
 
-        eval_examples = data.read_examples(os.path.join(self.data_dir, 'test.csv'))
+        eval_examples = data.read_examples(os.path.join(self.data_dir, 'test.json'))
         eval_features = data.convert_examples_to_features(eval_examples, self.tokenizer, self.max_seq_length)
         all_input_ids = torch.tensor(data.select_field(eval_features, 'input_ids'), dtype=torch.long)
         all_input_mask = torch.tensor(data.select_field(eval_features, 'input_mask'), dtype=torch.long)
         all_segment_ids = torch.tensor(data.select_field(eval_features, 'segment_ids'), dtype=torch.long)
-        all_utterance_mask = torch.tensor(data.select_field(eval_features, 'utterance_mask'), dtype=torch.long)
-        all_response_mask = torch.tensor(data.select_field(eval_features, 'response_mask'), dtype=torch.long)
-        all_history_mask = torch.tensor(data.select_field(eval_features, 'history_mask'), dtype=torch.long)
-        all_label = torch.tensor([f.label for f in eval_features], dtype=torch.long)
-        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,all_utterance_mask,all_response_mask,all_history_mask, all_label)
+        eval_labels_domain = torch.tensor([f.labels_domain for f in eval_features], dtype=torch.long)
+        eval_labels_dependcy = torch.tensor([f.labels_dependcy for f in eval_features], dtype=torch.long)
+
+
+        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, eval_labels_domain,eval_labels_dependcy)
         eval_sampler = SequentialSampler(eval_data)
         eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=self.eval_batch_size)
 
@@ -107,8 +104,8 @@ class Trainer:
         num_train_optimization_steps = self.train_steps
 
         # Prepare model
-        config = BertConfig.from_pretrained(self.model_name_or_path, num_labels=self.num_labels)
-        model = BertForSequenceClassification.from_pretrained(self.model_name_or_path, self.args, config=config)
+        config = BertConfig.from_pretrained(self.model_name_or_path)
+        model = BertForTokenClassification.from_pretrained(self.model_name_or_path,self.args, config=config)
         model.to(self.device)
         model.train()
         # Prepare optimizer
@@ -141,15 +138,16 @@ class Trainer:
         for step in range(num_train_optimization_steps):
             batch = next(train_dataloader)
             batch = tuple(t.to(self.device) for t in batch)
-            input_ids, input_mask, segment_ids,utterance_mask,response_mask,history_mask, label_ids = batch
-            loss = model(
+            input_ids, input_mask, segment_ids, label_domain,label_dependcy = batch
+
+            loss_domain,loss_dependcy = model(
                 input_ids=input_ids,
                 token_type_ids=segment_ids,
                 attention_mask=input_mask,
-                utterance_mask = utterance_mask,
-                response_mask = response_mask,
-                history_mask =history_mask,
-                labels=label_ids)
+                label_domain=label_domain,
+                label_dependcy = label_dependcy
+            )
+            loss = loss_domain+loss_dependcy
             tr_loss += loss.item()
             train_loss = round(tr_loss / (nb_tr_steps + 1), 4)
 
@@ -174,9 +172,11 @@ class Trainer:
             if self.do_eval and (step + 1) % (self.eval_steps * self.gradient_accumulation_steps) == 0:
                 for file in ['dev.csv']:
                     inference_labels = []
-                    gold_labels = []
+                    gold_labels_domain = []
+                    gold_labels_dependcy = []
                     inference_logits = []
-                    scores = []
+                    scores_domain = []
+                    scores_dependcy = []
                     ID = [x.guid for x in eval_examples]
 
                     logger.info("***** Running evaluation *****")
@@ -184,67 +184,69 @@ class Trainer:
                     logger.info("  Batch size = %d", self.eval_batch_size)
 
                     model.eval()
-                    eval_loss, eval_accuracy = 0, 0
+                    eval_loss_domain,eval_loss_dependcy, eval_accuracy_domain,eval_accuracy_dependcy = 0,0,0,0
                     nb_eval_steps, nb_eval_examples = 0, 0
-                    for input_ids, input_mask, segment_ids,utterance_mask,response_mask,history_mask,label_ids in eval_dataloader:
+                    for input_ids, input_mask, segment_ids,label_domain,label_dependcy in eval_dataloader:
                         input_ids = input_ids.to(self.device)
                         input_mask = input_mask.to(self.device)
                         segment_ids = segment_ids.to(self.device)
-                        utterance_mask = utterance_mask.to(self.device)
-                        response_mask = response_mask.to(self.device)
-                        history_mask = history_mask.to(self.device)
-                        label_ids = label_ids.to(self.device)
+                        label_domain = label_domain.to(self.device)
+                        label_dependcy = label_dependcy.to(self.device)
 
                         with torch.no_grad():
-                            tmp_eval_loss = model(
+                            batch_eval_loss_domain,batch_eval_loss_dependcy = model(
                                 input_ids=input_ids,
                                 token_type_ids=segment_ids,
                                 attention_mask=input_mask,
-                                utterance_mask = utterance_mask,
-                                response_mask = response_mask,
-                                history_mask = history_mask,
-                                labels=label_ids)
-                            logits = model(
+                                label_domain=label_domain,
+                                label_dependcy=label_dependcy
+                            )
+                            logits_domain,logits_dependcy = model(
                                 input_ids=input_ids,
                                 token_type_ids=segment_ids,
-                                attention_mask=input_mask,
-                                utterance_mask=utterance_mask,
-                                response_mask=response_mask,
-                                history_mask=history_mask,
+                                attention_mask=input_mask
+
                             )
 
-                        logits = logits.detach().cpu().numpy()
-                        label_ids = label_ids.to('cpu').numpy()
-                        inference_labels.append(np.argmax(logits, axis=1))
-                        scores.append(logits)
-                        gold_labels.append(label_ids)
-                        inference_logits.append(logits)
-                        eval_loss += tmp_eval_loss.mean().item()
+                        logits_domain = logits_domain.view(-1, self.num_labels_domain).detach().cpu().numpy()
+                        logits_dependcy = logits_dependcy.view(-1, self.num_labels_dependcy).detach().cpu().numpy()
+
+                        label_domain = label_domain.view(-1).to('cpu').numpy()
+                        label_dependcy = label_dependcy.view(-1).to('cpu').numpy()
+
+                        scores_domain.append(logits_domain)
+                        scores_dependcy.append(logits_dependcy)
+
+                        gold_labels_domain.append(label_domain)
+                        gold_labels_dependcy.append(label_dependcy)
+
+
+                        eval_loss_domain += batch_eval_loss_domain.mean().item()
+                        eval_loss_dependcy += batch_eval_loss_dependcy.mean().item()
                         nb_eval_examples += input_ids.size(0)
                         nb_eval_steps += 1
 
-                    gold_labels = np.concatenate(gold_labels, 0)
-                    inference_logits = np.concatenate(inference_logits, 0)
-                    scores = np.concatenate(scores, 0)
+                    gold_labels_domain = np.concatenate(gold_labels_domain, 0)
+                    gold_labels_dependcy = np.concatenate(gold_labels_dependcy, 0)
+                    scores_domain = np.concatenate(scores_domain, 0)
+                    scores_dependcy = np.concatenate(scores_dependcy, 0)
                     model.train()
-                    eval_loss = eval_loss / nb_eval_steps
-                    eval_accuracy = accuracyCQA(inference_logits, gold_labels)
-                    eval_DOUBAN_MRR, eval_DOUBAN_mrr, eval_DOUBAN_MAP, eval_Precision1 = compute_DOUBAN(ID, scores,
-                                                                                                        gold_labels)
-                    # print('eval_mrr',eval_mrr)
+                    eval_loss_domain = eval_loss_domain / nb_eval_steps
+                    eval_loss_dependcy = eval_loss_dependcy / nb_eval_steps
+
+
+                    eval_accuracy_domain = accuracyF1(scores_domain, gold_labels_domain,mode='domain')
+                    eval_accuracy_dependcy = accuracyF1(scores_dependcy, gold_labels_dependcy ,mode= 'dependcy')
                     print(
-                        'eval_F1',eval_accuracy,
-                        'eval_MRR', eval_DOUBAN_MRR,
-                        'eval_MAP', eval_DOUBAN_MAP,
-                        'eval_Precision1', eval_Precision1,
+                        'eval_F1_domain',eval_accuracy_domain,
+                        'eval_F1_dependcy', eval_accuracy_dependcy,
                         'global_step',global_step,
                         'loss',train_loss
                     )
-                    result = {'eval_loss': eval_loss,
-                              'eval_F1': eval_accuracy,
-                              'eval_MRR': eval_DOUBAN_MRR,
-                              'eval_MAP':eval_DOUBAN_MAP,
-                              'eval_Precision1':eval_Precision1,
+                    result = {'eval_loss_domain': eval_loss_domain,
+                              'eval_loss_dependcy':eval_loss_dependcy,
+                              'eval_F1_domain': eval_accuracy_domain,
+                              'eval_F1_dependcy': eval_accuracy_dependcy,
                               'global_step': global_step,
                               'loss': train_loss}
 
@@ -255,13 +257,12 @@ class Trainer:
                             writer.write("%s = %s\n" % (key, str(result[key])))
                         writer.write('*' * 80)
                         writer.write('\n')
-                    # if eval_accuracy > best_acc :
-                    if eval_DOUBAN_MRR > best_MRR:
+                    if eval_accuracy_domain > best_acc :
                         print("=" * 80)
-                        print("Best MRR", eval_DOUBAN_MRR)
+                        print("Best F1", eval_accuracy_domain)
                         print("Saving Model......")
                         # best_acc = eval_accuracy
-                        best_MRR = eval_DOUBAN_MRR
+                        best_acc = eval_accuracy_domain
                         # Save a trained model
                         model_to_save = model.module if hasattr(model,'module') else model
                         output_model_file = os.path.join(self.output_dir, "pytorch_model.bin")
@@ -270,88 +271,102 @@ class Trainer:
                     else:
                         print("=" * 80)
 
+
     def test_eval(self):
-        data = DATADOUBAN(
+        data = DATAMultiWOZ(
             debug=False,
             data_dir=self.data_dir
         )
-        test_examples = data.read_examples(os.path.join(self.data_dir, 'test.csv'))
+        test_examples = data.read_examples(os.path.join(self.data_dir, 'test.json'))
         print('eval_examples的数量', len(test_examples))
 
-        ID = [x.guid for x in test_examples]
+        dialogueID = [x.guid for x in test_examples]
+        utterance_text = [x.text_eachturn for x in test_examples]
 
         test_features = data.convert_examples_to_features(test_examples, self.tokenizer, self.max_seq_length)
         all_input_ids = torch.tensor(data.select_field(test_features, 'input_ids'), dtype=torch.long)
         all_input_mask = torch.tensor(data.select_field(test_features, 'input_mask'), dtype=torch.long)
         all_segment_ids = torch.tensor(data.select_field(test_features, 'segment_ids'), dtype=torch.long)
-        all_utterance_mask = torch.tensor(data.select_field(test_features, 'utterance_mask'), dtype=torch.long)
-        all_response_mask = torch.tensor(data.select_field(test_features, 'response_mask'), dtype=torch.long)
-        all_history_mask = torch.tensor(data.select_field(test_features, 'history_mask'), dtype=torch.long)
+        eval_labels_domain = torch.tensor([f.labels_domain for f in test_features], dtype=torch.long)
+        eval_labels_dependcy = torch.tensor([f.labels_dependcy for f in test_features], dtype=torch.long)
 
-        all_label = torch.tensor([f.label for f in test_features], dtype=torch.long)
-
-        test_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,all_utterance_mask,all_response_mask,all_history_mask, all_label)
+        test_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,eval_labels_domain,eval_labels_dependcy)
         # Run prediction for full data
         test_sampler = SequentialSampler(test_data)
         test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=self.eval_batch_size)
 
 
 
-        config = BertConfig.from_pretrained(self.model_name_or_path, num_labels=self.num_labels)
-        model = BertForSequenceClassification.from_pretrained(
+        config = BertConfig.from_pretrained(self.model_name_or_path)
+        model = BertForTokenClassification.from_pretrained(
             os.path.join(self.output_dir, "pytorch_model.bin"), self.args, config=config)
         model.to(self.device)
         model.eval()
 
         inference_labels = []
-        gold_labels = []
-        scores = []
+        gold_labels_domain = []
+        gold_labels_dependcy = []
+        scores_domain = []
+        scores_dependcy = []
 
-        for input_ids, input_mask, segment_ids, utterance_mask, response_mask, history_mask, label_ids in test_dataloader:
+        for input_ids, input_mask, segment_ids,label_domain,label_dependcy in test_dataloader:
             input_ids = input_ids.to(self.device)
             input_mask = input_mask.to(self.device)
             segment_ids = segment_ids.to(self.device)
-            utterance_mask = utterance_mask.to(self.device)
-            response_mask = response_mask.to(self.device)
-            history_mask = history_mask.to(self.device)
-            label_ids = label_ids.to(self.device)
+            label_domain = label_domain.to(self.device)
+            label_dependcy = label_dependcy.to(self.device)
 
             with torch.no_grad():
-                logits = model(
+                logits_domain,logits_dependcy = model(
                     input_ids=input_ids,
                     token_type_ids=segment_ids,
-                    attention_mask=input_mask,
-                    utterance_mask=utterance_mask,
-                    response_mask=response_mask,
-                    history_mask=history_mask,
-                ).detach().cpu().numpy()
-            label_ids = label_ids.to('cpu').numpy()
-            scores.append(logits)
-            inference_labels.append(np.argmax(logits, axis=1))
-            gold_labels.append(label_ids)
-        gold_labels = np.concatenate(gold_labels, 0)
-        scores = np.concatenate(scores, 0)
-        logits = np.concatenate(inference_labels, 0)
+                    attention_mask=input_mask
+                )
+            logits_domain = logits_domain.view(-1, self.num_labels_domain).cpu().numpy()
+            logits_dependcy = logits_dependcy.view(-1, self.num_labels_dependcy).cpu().numpy()
+
+
+            label_domain = label_domain.view(-1).to('cpu').numpy()
+            label_dependcy = label_dependcy.view(-1).to('cpu').numpy()
+
+            scores_domain.append(logits_domain)
+            scores_dependcy.append(logits_dependcy)
+
+            gold_labels_domain.append(label_domain)
+            gold_labels_dependcy.append(label_dependcy)
+
+        gold_labels_domain = np.concatenate(gold_labels_domain, 0)
+        gold_labels_dependcy = np.concatenate(gold_labels_dependcy, 0)
+        scores_domain = np.concatenate(scores_domain, 0)
+        scores_dependcy = np.concatenate(scores_dependcy, 0)
 
         # 计算评价指标
-        assert  len(ID) == scores.shape[0]== scores.shape[0]
-        eval_DOUBAN_MRR,eval_DOUBAN_mrr,eval_DOUBAN_MAP,eval_Precision1 = compute_DOUBAN(ID,scores,gold_labels)
-        print(
-            'eval_MRR',eval_DOUBAN_MRR,eval_DOUBAN_mrr,
-            'eval_MAP',eval_DOUBAN_MAP,
-            'eval_Precision1',eval_Precision1)
-
+        assert   scores_domain.shape[0] == scores_dependcy.shape[0] == gold_labels_domain.shape[0] == gold_labels_dependcy.shape[0]
+        eval_accuracy_domain = accuracyF1(scores_domain, gold_labels_domain,mode='domain',report=True)
+        eval_accuracy_dependcy = accuracyF1(scores_dependcy, gold_labels_dependcy,mode='dependcy',report=True)
+        eval_jointGoal = compute_jointgoal(
+            dialogueID,
+            utterance_text,
+            scores_domain,
+            gold_labels_domain,
+            scores_dependcy,
+            gold_labels_dependcy
+        )
+        print('eval_accuracy_domain',eval_accuracy_domain)
+        print('eval_accuracy_dependcy', eval_accuracy_dependcy)
+        print('eval_jointGoal', eval_jointGoal)
 
 
 if __name__ == "__main__":
 
     trainer = Trainer(
-        data_dir = '/home/lsy2018/TextClassification/DATA/DATA_DOUBAN/data_1102/',
-        output_dir = './model_DOUBAN_Triple13',
+        data_dir = '/home/lsy2018/TextClassification/DATA/DATA_MultiWOZ/data_1130/',
+        output_dir = './model_MultiWOZ_1',
         # DOUBAN 是二分类
-        num_labels= 2,
+        num_labels_domain = 8,
+        num_labels_dependcy = 4,
         args = args)
     trainer.train()
     time_start = time.time()
-    trainer.test_eval()
+    # trainer.test_eval()
     print('1000条测试运行时间',time.time()-time_start,'s')
